@@ -183,6 +183,31 @@ fn joystick_reads_centred_axes() {
 }
 
 #[test]
+fn joystick_dead_zone_defaults_to_26_and_can_be_turned_off() {
+    // 12 and 8 counts off centre: inside the default dead zone. (The axes
+    // are inverted: raw 0 is +127.)
+    let mut joystick = Joystick::new(bus(0x58, &[140, 120, 0], 3));
+    assert_eq!(joystick.deadzone(), 26);
+    let centred = JoystickState {
+        x: 0,
+        y: 0,
+        pressed: false,
+    };
+    assert_eq!(joystick.read().unwrap(), centred);
+
+    joystick.set_deadzone(0);
+    assert_eq!(joystick.deadzone(), 0);
+    assert_eq!(
+        joystick.read().unwrap(),
+        JoystickState {
+            x: -12,
+            y: 8,
+            pressed: false
+        }
+    );
+}
+
+#[test]
 fn opto_relay_switches_and_reads_the_pin() {
     let mut relay = OptoRelay::new(bus(0x28, &[1, 0, 0], 3));
     relay.on().unwrap();
