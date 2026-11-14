@@ -30,7 +30,7 @@ fn reads_buttons_and_sets_leds() {
     let bus = buttons.release();
     let board = bus.node(0x3E);
     assert_eq!(board.frames, vec![vec![1, 0, 1]]);
-    assert_eq!(board.dropped, 0);
+    assert_eq!((board.dropped, board.long), (0, 0));
 }
 
 #[test]
