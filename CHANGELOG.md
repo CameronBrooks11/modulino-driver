@@ -102,8 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   continuous). `set_range_timing(budget_ms, inter_measurement_ms)`
   replaces `set_timing_budget` and `set_inter_measurement`, computing the
   registers from the chip's oscillator as ST does, and refuses values ST
-  refuses (`OutOfRange`). `start_ranging(&mut delay)` starts continuous
-  or autonomous ranging by the period set. `read()` returns
+  refuses (`OutOfRange`), as well as a period too long for its register;
+  an oscillator or PLL reading of 0 is `DataError`.
+  `start_ranging(&mut delay)` starts continuous or autonomous ranging by
+  the period set, finding the variant first if `verify` has not run. `read()` returns
   `DistanceReading` (distance, ST's range status, signal, ambient,
   sigma, SPADs) and replaces `read_distance` and `read_range_status`.
 - `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
@@ -153,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   476, 571-580). `LatchRelay` now waits the handler out. Read from the
   firmware source; not yet observed on hardware.
 - `Distance::init` returns `Error::Timeout` when the sensor never boots
-  or never finishes calibrating; 0.3 gave up after 1000 polls and carried
+  or never finishes calibrating; 0.3 gave up after 1001 polls and carried
   on. `start_ranging` on a VL53L4CD has the same bound.
 - `Distance` timing budgets are computed from the oscillator reading;
   0.3 wrote fixed register values for a few budgets, used 20 ms for any

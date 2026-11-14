@@ -214,6 +214,8 @@ pub struct FakeChip {
     pub reply_after: usize,
     /// Registers that ignore writes, as status registers do.
     pub read_only: Vec<u16>,
+    /// Every write frame received, in order.
+    pub writes: Vec<Vec<u8>>,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
@@ -230,6 +232,7 @@ impl FakeChip {
             nack_idle_reads: false,
             reply_after: 0,
             read_only: Vec::new(),
+            writes: Vec::new(),
             pointer: 0,
             reply: None,
             not_ready: 0,
@@ -255,6 +258,7 @@ impl FakeChip {
     }
 
     fn write(&mut self, data: &[u8]) {
+        self.writes.push(data.to_vec());
         if let Some((_, reply)) = self.commands.iter().find(|(c, _)| c == data) {
             self.reply = Some(reply.clone());
             self.not_ready = self.reply_after;

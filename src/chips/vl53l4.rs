@@ -54,7 +54,8 @@ const DEFAULT_CONFIGURATION: [u8; 91] = [
 ];
 const CONFIG_START: u16 = 0x2D;
 
-/// Polls of 1 ms each before a wait gives up, as in ST's drivers.
+/// Polls, 1 ms apart, before a wait gives up: about the 1 s ST's drivers
+/// allow (their loops poll up to 1001 times).
 pub const WAIT_POLLS: u32 = 1000;
 
 /// Which of the two chips answered.
@@ -238,8 +239,9 @@ impl<I2C: I2c> Vl53l4<I2C> {
     /// ST's `SetRangeTiming`: a timing budget of 10-200 ms, and either
     /// continuous ranging (`inter_measurement_ms` 0) or autonomous ranging
     /// with a period longer than the budget. Anything else is
-    /// [`Error::OutOfRange`]; an oscillator reading of 0 is
-    /// [`Error::DataError`].
+    /// [`Error::OutOfRange`], as is a period too long for the register; an
+    /// oscillator or PLL calibration reading of 0 is [`Error::DataError`].
+    /// ST's driver checks neither of the last two.
     pub fn set_range_timing(
         &mut self,
         budget_ms: u32,
@@ -260,7 +262,14 @@ impl<I2C: I2c> Vl53l4<I2C> {
             budget_us -= 2500;
         } else {
             let clock_pll = self.read_u16(RESULT_OSC_CALIBRATE_VAL)? & 0x3FF;
+            if clock_pll == 0 {
+                return Err(Error::DataError);
+            }
+            // Left to right, as ST's C evaluates it.
             let period = 1.055_f32 * inter_measurement_ms as f32 * clock_pll as f32;
+            if period >= 4_294_967_296.0 {
+                return Err(Error::OutOfRange);
+            }
             self.write_u32(INTERMEASUREMENT_MS, period as u32)?;
             budget_us = (budget_us - 4300) / 2;
         }
@@ -271,15 +280,20 @@ impl<I2C: I2c> Vl53l4<I2C> {
 
     /// Start ranging, continuous or autonomous by the period last set. On
     /// the VL53L4CD this then waits for the first sample and discards it, as
-    /// ST's driver does.
+    /// ST's driver does. Runs [`Vl53l4::verify`] first if the variant is not
+    /// yet known.
     pub fn start_ranging(&mut self, delay: &mut impl DelayNs) -> Result<(), Error<I2C::Error>> {
+        let variant = match self.variant {
+            Some(v) => v,
+            None => self.verify()?,
+        };
         let start = if self.read_u32(INTERMEASUREMENT_MS)? == 0 {
             START_CONTINUOUS
         } else {
             START_AUTONOMOUS
         };
         self.write_u8(SYSTEM_START, start)?;
-        if self.variant == Some(Variant::Cd) {
+        if variant == Variant::Cd {
             self.wait(delay, |s| s.data_ready())?;
             self.clear_interrupt()?;
         }
