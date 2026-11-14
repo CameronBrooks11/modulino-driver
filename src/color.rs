@@ -27,12 +27,6 @@ impl Color {
         }
     }
 
-    /// Convert to a 32-bit value for APA102 LEDs.
-    /// Format: 0xRRGGBB00 (red in high bits, blue shifted left by 8)
-    pub const fn to_apa102_data(&self) -> u32 {
-        (self.b as u32) << 8 | (self.g as u32) << 16 | (self.r as u32) << 24
-    }
-
     /// Black (off)
     pub const BLACK: Color = Color::new(0, 0, 0);
 
