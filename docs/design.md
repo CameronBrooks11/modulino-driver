@@ -468,8 +468,8 @@ Each one leaves `main` green and usable. Tracked as sub-issues of one epic.
 | # | Milestone | Ships |
 |---|---|---|
 | M0 | Rebrand and gate | Crate renamed, README with attribution and corrected module table (the LED matrix is STM32-driven, not IS31FL3733), justfile, AGENTS.md, CI kept green |
-| M1 | Spec seed and node layer | `spec/nodes.toml`, `src/spec.rs` and its conformance test; `addr.rs`; `node.rs` with identity check, exact length and prefix guard; new `Error`; `FakeNode` |
-| M2 | Node devices | Buttons, Buzzer, Vibro, Knob, Pixels, Joystick, Opto relay, Latch relay on `Node`, with codecs and JSON vectors; per-driver `discover()` deleted; Vibro off fixed |
+| M1 | Buttons end to end on the new core | `spec/nodes.toml`, `src/spec.rs` and its conformance test; `addr.rs`; `node.rs` with identity check, exact length and prefix guard; new `Error`; `FakeNode`; Buttons rebuilt on them with codec and JSON vectors, proving every layer once |
+| M2 | Remaining node devices | Buzzer, Vibro, Knob, Pixels, Joystick, Opto relay, Latch relay on `Node`, with codecs and vectors; per-driver `discover()` deleted; Vibro off fixed |
 | M3 | LED matrix and Motors | Mode-tracked matrix (12/48), Motors commands and status, vectors |
 | M4 | Hub routing | `HubPort` as `I2c`, nested ports, deselect on error, `FakeHub` |
 | M5 | Scan | Evidence-based classification over 0x01-0x77, hub check, collision tests |
