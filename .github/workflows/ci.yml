@@ -71,6 +71,26 @@ jobs:
       - name: Build library with defmt
         run: cargo check --target ${{ matrix.target }} --features defmt
 
+  # The declared rust-version (Cargo.toml), library only: the
+  # dev-dependencies need a newer toolchain.
+  msrv:
+    name: MSRV (1.75)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.75"
+      # No rust-cache here: its post step runs `cargo metadata`, which 1.75
+      # cannot do for the dev-dependencies, so it would save nothing.
+      # `+1.75` keeps the steps on 1.75 even if setting the default failed.
+      - name: Check library
+        run: cargo +1.75 check --lib
+      - name: Check library with defmt
+        run: cargo +1.75 check --lib --features defmt
+
   security_audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -86,7 +106,7 @@ jobs:
   ok:
     name: ok
     if: always()
-    needs: [rust-checks, build-targets, security_audit]
+    needs: [rust-checks, build-targets, msrv, security_audit]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
