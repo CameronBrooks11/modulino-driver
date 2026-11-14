@@ -534,7 +534,20 @@ mod distance {
         assert_eq!(d.set_range_timing(50, 50), Err(Error::OutOfRange));
         // 1.055 * 10 000 000 * 1023 does not fit the 32-bit register.
         assert_eq!(d.set_range_timing(20, 10_000_000), Err(Error::OutOfRange));
-        assert_eq!(dword(&d.release(), 0x006C), 0, "nothing written");
+        // The boundary: 1.055 * 3979530 * 1023 is exactly 2^32 in f32, the
+        // value below it fits.
+        assert_eq!(d.set_range_timing(20, 3_979_530), Err(Error::OutOfRange));
+        let bus = d.release();
+        // Only register-pointer writes for the reads; no data written.
+        assert!(
+            bus.chips[0].writes.iter().all(|w| w.len() == 2),
+            "nothing written"
+        );
+        let mut d = Distance::new(chips(vec![sensor(0xEB)
+            .reg(0x00DE, 0x03)
+            .reg(0x00DF, 0xFF)]));
+        d.set_range_timing(20, 3_979_529).unwrap();
+        assert_eq!(dword(&d.release(), 0x006C), 4_294_966_272);
         let mut zero = Distance::new(chips(vec![sensor(0xEB).reg(0x0006, 0).reg(0x0007, 0)]));
         assert_eq!(zero.set_range_timing(50, 0), Err(Error::DataError));
         let mut no_pll = Distance::new(chips(vec![sensor(0xEB)]));

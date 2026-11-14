@@ -395,7 +395,8 @@ identity check, with the identity byte where the check reads one.
 `InvalidParameter` from 0.3 folds into `OutOfRange`, and `DeviceNotFound`
 becomes `NotFound`. `DataError` stays, narrowed to a reply the protocol
 does not define or a corrupted one: an LED matrix mode other than `MON` or
-`GS4`, or an SHT31 measurement whose CRC fails. While M2-M6 move
+`GS4`, an SHT31 measurement whose CRC fails, or a VL53L4 oscillator or PLL
+calibration reading of 0. While M2-M6 move
 the remaining drivers over, the 0.3 variants stay beside the new ones and
 are removed with their last user. A `defmt` feature derives
 `defmt::Format`, as today.

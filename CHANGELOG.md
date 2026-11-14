@@ -105,9 +105,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses (`OutOfRange`), as well as a period too long for its register;
   an oscillator or PLL reading of 0 is `DataError`.
   `start_ranging(&mut delay)` starts continuous or autonomous ranging by
-  the period set, finding the variant first if `verify` has not run. `read()` returns
-  `DistanceReading` (distance, ST's range status, signal, ambient,
-  sigma, SPADs) and replaces `read_distance` and `read_range_status`.
+  the period set, finding the variant first if `verify` has not run.
+  `read()` returns `DistanceReading` (distance, ST's range status,
+  signal, ambient, sigma, SPADs) and replaces `read_distance` and
+  `read_range_status`.
 - `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
   `HubPort` that implements `I2c`: each transaction selects the port,
   runs the operations and deselects, even when they fail, so any device

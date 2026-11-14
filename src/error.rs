@@ -22,8 +22,9 @@ pub enum Error<E> {
     /// Operation timed out
     Timeout,
     /// The board sent a reply the protocol does not define, or a corrupted
-    /// one: an LED matrix mode other than `MON` or `GS4`, or an SHT31
-    /// measurement whose CRC fails.
+    /// one: an LED matrix mode other than `MON` or `GS4`, an SHT31
+    /// measurement whose CRC fails, or a VL53L4 oscillator or PLL
+    /// calibration reading of 0.
     DataError,
     /// A node answered with a strap byte that is not one of its kind's.
     WrongIdentity {

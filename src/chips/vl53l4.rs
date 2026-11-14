@@ -241,7 +241,8 @@ impl<I2C: I2c> Vl53l4<I2C> {
     /// with a period longer than the budget. Anything else is
     /// [`Error::OutOfRange`], as is a period too long for the register; an
     /// oscillator or PLL calibration reading of 0 is [`Error::DataError`].
-    /// ST's driver checks neither of the last two.
+    /// ST's driver checks the oscillator reading but neither the period's
+    /// size nor the PLL reading.
     pub fn set_range_timing(
         &mut self,
         budget_ms: u32,
