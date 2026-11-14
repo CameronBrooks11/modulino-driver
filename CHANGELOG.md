@@ -175,8 +175,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `Error::DeviceNotFound` and `Error::InvalidParameter`, which nothing
-  returns any more: out-of-range values are `OutOfRange`, and a missing or
-  different device is the bus error, `WrongChip` or `WrongIdentity`.
+  returns any more. An identity mismatch is `WrongChip` (was
+  `DeviceNotFound`); out-of-range values are `OutOfRange`, a wrong LED
+  matrix frame length `FrameLength`, and `Hub::port` returns `None` for a
+  port above 7 (were `InvalidParameter`).
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.

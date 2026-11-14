@@ -403,15 +403,17 @@ pub enum Error<E> {
 `WrongIdentity` is a node whose strap byte belongs to another kind;
 `WrongChip` is something at a chip's address that fails the chip's
 identity check, with the identity byte where the check reads one.
-`InvalidParameter` from 0.3 folds into `OutOfRange`; where 0.3 returned
-`DeviceNotFound`, a driver now returns the bus error (nothing answered) or
-`WrongChip`/`WrongIdentity` (something else answered), and both 0.3
-variants are gone. `InvalidAddress` stays for the service module (M7),
-whose address-in-use check is its likely first user. `DataError` stays, narrowed to a reply the protocol
-does not define or a corrupted one: an LED matrix mode other than `MON` or
-`GS4`, an SHT31 measurement whose CRC fails, or a VL53L4 oscillator or PLL
-calibration reading of 0. A `defmt` feature derives `defmt::Format`, as
-today.
+Both 0.3-only variants are gone. 0.3 returned `DeviceNotFound` only for an
+identity mismatch (Light, Movement, Pressure), which is now `WrongChip`; a
+device that does not answer was already the bus error. `InvalidParameter`
+became `OutOfRange` for values, `FrameLength` for an LED matrix frame of the
+wrong length, and `None` from `Hub::port` for a port above 7; its pixel
+coordinate checks went with the framebuffer API. `InvalidAddress` stays for the service module (M7), whose address-in-use
+check is its likely first user. `DataError` stays, narrowed to a reply the
+protocol does not define or a corrupted one: an LED matrix mode other than
+`MON` or `GS4`, an SHT31 measurement whose CRC fails, or a VL53L4
+oscillator or PLL calibration reading of 0. A `defmt` feature derives
+`defmt::Format`, as today.
 
 ## 5. Decisions
 
