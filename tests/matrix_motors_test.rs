@@ -88,6 +88,31 @@ fn matrix_mode_commands_are_padded_to_the_current_length() {
     assert_eq!(matrix.release().node(MATRIX).matrix_grayscale, Some(false));
 }
 
+/// A matrix whose next `n` writes fail.
+fn matrix_failing_writes(grayscale: bool, n: usize) -> LedMatrix<FakeBus> {
+    let mut board = FakeNode::led_matrix(grayscale);
+    board.fail_writes = n;
+    LedMatrix::new(FakeBus::new(vec![board]))
+}
+
+#[test]
+fn a_failed_mode_switch_does_not_cache_the_target() {
+    let mut matrix = matrix_failing_writes(false, 1);
+    assert!(matrix.set_mode(MatrixMode::Grayscale).is_err());
+    // The board never took the command: still mono, read again.
+    assert_eq!(matrix.mode().unwrap(), MatrixMode::Mono);
+}
+
+#[test]
+fn a_failed_picture_forgets_the_mode() {
+    let mut matrix = matrix_failing_writes(true, 1);
+    matrix.verify().unwrap();
+    assert!(matrix.show_gray(&[[0u8; 12]; 8]).is_err());
+    assert_eq!(matrix.mode().unwrap(), MatrixMode::Grayscale);
+    // verify, the failed picture, then a fresh read of the mode.
+    assert_eq!(matrix.release().transactions, 3);
+}
+
 #[test]
 fn matrix_set_mode_reads_the_board_first() {
     // The tracked mode can be stale (board reset, another host), so

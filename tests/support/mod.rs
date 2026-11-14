@@ -45,6 +45,9 @@ pub struct FakeNode {
     pub long: usize,
     /// Set by a `CF` command.
     pub address_changes: usize,
+    /// Writes still to fail: the board NACKs each one and processes
+    /// nothing, as a busy or resetting board would.
+    pub fail_writes: usize,
     /// `Some(grayscale)` for an LED matrix, whose write length and read
     /// payload follow its mode (main.c:324-338, 506-516, 555-556).
     pub matrix_grayscale: Option<bool>,
@@ -77,6 +80,7 @@ impl FakeNode {
             dropped: 0,
             long: 0,
             address_changes: 0,
+            fail_writes: 0,
             matrix_grayscale: None,
         }
     }
@@ -431,6 +435,18 @@ impl I2c for FakeBus {
         for op in ops.iter_mut() {
             match op {
                 Operation::Write(data) => {
+                    let mut nacked = false;
+                    for t in targets.iter_mut() {
+                        if let Target::Node(n) = t {
+                            if n.fail_writes > 0 {
+                                n.fail_writes -= 1;
+                                nacked = true;
+                            }
+                        }
+                    }
+                    if nacked {
+                        return Err(Nack(address));
+                    }
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => n.write(data),
