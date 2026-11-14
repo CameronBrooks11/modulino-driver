@@ -389,29 +389,29 @@ One error type for the crate:
 ```rust
 pub enum Error<E> {
     I2c(E),
-    NotFound,
-    WrongIdentity { expected: Kind, got: u8 },
-    WrongChip { expected: ChipKind, got: Option<u8> },
-    FrameLength { expected: usize, got: usize },
-    ReservedPrefix,
     InvalidAddress,
     OutOfRange,
     Timeout,
     DataError,
+    WrongIdentity { expected: Kind, got: u8 },
+    FrameLength { expected: usize, got: usize },
+    WrongChip { expected: ChipKind, got: Option<u8> },
+    ReservedPrefix,
 }
 ```
 
 `WrongIdentity` is a node whose strap byte belongs to another kind;
 `WrongChip` is something at a chip's address that fails the chip's
 identity check, with the identity byte where the check reads one.
-`InvalidParameter` from 0.3 folds into `OutOfRange`, and `DeviceNotFound`
-becomes `NotFound`. `DataError` stays, narrowed to a reply the protocol
+`InvalidParameter` from 0.3 folds into `OutOfRange`; where 0.3 returned
+`DeviceNotFound`, a driver now returns the bus error (nothing answered) or
+`WrongChip`/`WrongIdentity` (something else answered), and both 0.3
+variants are gone. `InvalidAddress` stays for the service module (M7),
+whose address-in-use check is its likely first user. `DataError` stays, narrowed to a reply the protocol
 does not define or a corrupted one: an LED matrix mode other than `MON` or
 `GS4`, an SHT31 measurement whose CRC fails, or a VL53L4 oscillator or PLL
-calibration reading of 0. While M2-M6 move
-the remaining drivers over, the 0.3 variants stay beside the new ones and
-are removed with their last user. A `defmt` feature derives
-`defmt::Format`, as today.
+calibration reading of 0. A `defmt` feature derives `defmt::Format`, as
+today.
 
 ## 5. Decisions
 
