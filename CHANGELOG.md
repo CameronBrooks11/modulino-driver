@@ -179,6 +179,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DeviceNotFound`); out-of-range values are `OutOfRange`, a wrong LED
   matrix frame length `FrameLength`, and `Hub::port` returns `None` for a
   port above 7 (were `InvalidParameter`).
+- `Color::to_apa102_data`. Nothing called it, and its `0xRRGGBB00` word
+  is not what Pixels sends: `codec::pixels::encode` builds each LED as
+  `[0xE0 | brightness, b, g, r]`.
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
