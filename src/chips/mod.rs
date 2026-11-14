@@ -21,7 +21,7 @@ pub use vl53l4::Vl53l4;
 use embedded_hal::i2c::{ErrorKind, I2c};
 
 use crate::addr::Address;
-use crate::spec::{sensirion_crc8, ChipId, ChipKind, CHIPS};
+use crate::spec::{sensirion_crc8, ChipId, ChipKind, CHIPS, NODES};
 use crate::Error;
 
 /// `Ok(true)` on success, `Ok(false)` on a NACK, `Err` for anything else.
@@ -45,13 +45,19 @@ pub(crate) fn is_nack<E: embedded_hal::i2c::Error>(e: &Error<E>) -> bool {
 /// nothing unless a device at the SHT31 address accepted the command.
 const SHT3X_READ_TRIES: usize = 200;
 
+/// Whether `byte` is a strap byte of any node kind.
+fn is_node_strap(byte: u8) -> bool {
+    NODES.iter().any(|n| n.straps.contains(&byte))
+}
+
 /// What an identity check found, when the bus itself did not fail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IdCheck {
     /// The identity matched.
     Match,
     /// Something answered with another identity: the byte read, or `None`
-    /// for an SHT3x status whose CRC did not match.
+    /// for an SHT3x status whose CRC did not match. A node that answered
+    /// the SHT3x check gives its strap byte.
     Mismatch(Option<u8>),
     /// An SHT3x accepted the command but never released its status.
     NoReply,
@@ -97,11 +103,27 @@ pub(crate) fn check_id<I: I2c>(
             let mut status = [0u8; 3];
             for _ in 0..SHT3X_READ_TRIES {
                 if acked(bus.read(raw, &mut status))? {
-                    return Ok(if sensirion_crc8(&status[..2]) == status[2] {
-                        IdCheck::Match
-                    } else {
-                        IdCheck::Mismatch(None)
-                    });
+                    if sensirion_crc8(&status[..2]) != status[2] {
+                        return Ok(IdCheck::Mismatch(None));
+                    }
+                    // A node drops the 2-byte command, shorter than any node
+                    // frame (main.c:531-561), and starts every read with its
+                    // strap byte (main.c:476), so its reply can pass the CRC
+                    // by chance: a Knob strapped 0x74 at 1 in 256 counts. An
+                    // SHT3x status can start with a strap value too (0x04 or
+                    // 0x28 fit its defined bits, SHT3x-DIS datasheet v7
+                    // Table 18), so read once more: a node repeats its strap
+                    // byte. An SHT3x NACKs a read with no data present after
+                    // a single-shot measurement command (datasheet p. 10);
+                    // that it does the same once its status has been read is
+                    // assumed, unconfirmed on hardware.
+                    if is_node_strap(status[0])
+                        && acked(bus.read(raw, &mut byte))?
+                        && byte[0] == status[0]
+                    {
+                        return Ok(IdCheck::Mismatch(Some(status[0])));
+                    }
+                    return Ok(IdCheck::Match);
                 }
             }
             Ok(IdCheck::NoReply)

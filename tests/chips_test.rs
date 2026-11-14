@@ -380,6 +380,21 @@ mod thermo {
     }
 
     #[test]
+    fn a_knob_at_0x45_is_not_taken_for_an_sht31() {
+        // Count 144 makes the knob's reply pass the SHT3x status CRC.
+        let knob = support::FakeNode::new(0x74, &[0x90, 0x00, 0x00], 4).at(0x45);
+        let mut thermo = Thermo::new(FakeBus::new(vec![knob]));
+        assert_eq!(
+            thermo.verify(),
+            Err(Error::WrongChip {
+                expected: ChipKind::Sht31,
+                got: Some(0x74)
+            })
+        );
+        assert_eq!(thermo.chip(), None);
+    }
+
+    #[test]
     fn nothing_there_is_the_sht31_nack() {
         let mut thermo = Thermo::new(FakeBus::default());
         assert_eq!(thermo.verify(), Err(Error::I2c(Nack(0x45))));

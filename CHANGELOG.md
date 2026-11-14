@@ -132,7 +132,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identify each answer by evidence (hub control register, chip identity
   check, node strap byte) as `Found::Node`, `Chip`, `Hub` or `Unknown`.
   `spec/chips.toml` and `spec::CHIPS` hold the chip identities, and
-  `ChipKind` names them.
+  `ChipKind` names them. A node moved to 0x45 is not taken for an SHT31,
+  though its reply can pass the status CRC (a Knob strapped 0x74 at 1 in
+  256 counts): when the status starts with a strap value, a further read
+  that repeats it marks a node, and `Thermo::verify` returns `WrongChip`.
 - `Error::WrongChip { expected, got }`, and the `chips` module.
   `Pressure::with_address` and `Pressure::verify`.
 - `codec`: a pure encoder/decoder per node kind, with the protocol
