@@ -3,7 +3,7 @@
 use embedded_hal::i2c::I2c;
 
 use crate::addr::Address;
-use crate::codec::led_matrix::{self as codec, Mode, COLS, GRAY_LEN, MONO_LEN, ROWS};
+use crate::codec::led_matrix::{self as codec, Mode, COLS, ROWS};
 use crate::codec::OutOfRange;
 use crate::node::Node;
 use crate::spec::Kind;
@@ -77,13 +77,9 @@ impl<I2C: I2c> LedMatrix<I2C> {
     /// first, so the command can be padded to that mode's length, the only
     /// length the firmware accepts.
     pub fn set_mode(&mut self, target: Mode) -> Result<(), Error<I2C::Error>> {
-        let sent = match self.read_mode()? {
-            Mode::Mono => self
-                .node
-                .write(&codec::encode_mode_command::<MONO_LEN>(target)),
-            Mode::Grayscale => self
-                .node
-                .write(&codec::encode_mode_command::<GRAY_LEN>(target)),
+        let sent = match codec::encode_mode_command(self.read_mode()?, target) {
+            codec::ModeCommand::Mono(f) => self.node.write(&f),
+            codec::ModeCommand::Grayscale(f) => self.node.write(&f),
         };
         // After a failed write the board may or may not have switched.
         self.mode = sent.as_ref().ok().map(|_| target);

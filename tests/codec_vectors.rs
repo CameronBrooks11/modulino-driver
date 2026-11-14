@@ -268,10 +268,14 @@ fn led_matrix_vectors() {
     }
     for case in cases(&doc, "encode_mode_command") {
         let target = mode(case["args"]["target"].as_str().expect("target"));
-        match arg::<usize>(case, "len") {
-            12 => check_encode(case, Ok(led_matrix::encode_mode_command::<12>(target))),
-            48 => check_encode(case, Ok(led_matrix::encode_mode_command::<48>(target))),
-            other => panic!("no mode has length {other}"),
+        let current = mode(case["args"]["current"].as_str().expect("current"));
+        // The variant fixes the length: a frame sized for the wrong mode
+        // fails to convert.
+        match led_matrix::encode_mode_command(current, target) {
+            led_matrix::ModeCommand::Mono(f) => assert_eq!(f, bytes(&case["expect"]), "{case:?}"),
+            led_matrix::ModeCommand::Grayscale(f) => {
+                assert_eq!(f, bytes(&case["expect"]), "{case:?}")
+            }
         }
     }
     for case in cases(&doc, "encode_mono") {

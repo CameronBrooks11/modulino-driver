@@ -70,16 +70,36 @@ pub fn decode_mode(payload: &[u8; READ_PAYLOAD]) -> Option<Mode> {
     }
 }
 
-/// Encode the command that switches to `target`, padded with zeros to `N`,
-/// which must be the length of the mode the board is in now.
-pub fn encode_mode_command<const N: usize>(target: Mode) -> [u8; N] {
-    let mut f = [0u8; N];
+/// A mode command, sized for the mode the board is in when it is sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ModeCommand {
+    /// For a board in monochrome mode
+    Mono([u8; MONO_LEN]),
+    /// For a board in grayscale mode
+    Grayscale([u8; GRAY_LEN]),
+}
+
+/// Encode the command that switches a board in mode `current` to `target`:
+/// the command, padded with zeros to `current`'s length, the only length
+/// the board accepts.
+pub fn encode_mode_command(current: Mode, target: Mode) -> ModeCommand {
     let command = match target {
         Mode::Mono => MONO_COMMAND,
         Mode::Grayscale => GRAYSCALE_COMMAND,
     };
-    f[..3].copy_from_slice(command);
-    f
+    match current {
+        Mode::Mono => {
+            let mut f = [0u8; MONO_LEN];
+            f[..3].copy_from_slice(command);
+            ModeCommand::Mono(f)
+        }
+        Mode::Grayscale => {
+            let mut f = [0u8; GRAY_LEN];
+            f[..3].copy_from_slice(command);
+            ModeCommand::Grayscale(f)
+        }
+    }
 }
 
 /// Encode a monochrome picture, `pixels[row][col]`.
