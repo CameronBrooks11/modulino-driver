@@ -28,14 +28,15 @@ kind = "vl53l4"
 module = "distance"
 addresses = [0x29]
 id = { method = "register16", register = 0x010F, value = 0xEB, mask = 0xFF }
-# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows),
-# from memory of ST's driver. The VL53L4ED is assumed to report the same.
+# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows);
+# arduino-modulino-mpy names both values at lib/vl53l4cd.py:91. The
+# VL53L4ED is assumed to report the same.
 # Counter-evidence to weigh at the bench: arduino-modulino-mpy disabled its
 # model ID check upstream (lib/vl53l4cd.py:90-92, commit 7ff5e3c), and
 # Arduino_Modulino falls back from VL53L4CD to VL53L4ED initialisation
 # (Modulino.h:946-955).
 verified = false
-source = "arduino-modulino-mpy lib/vl53l4cd.py:66 (register only); Modulino.h:938-939"
+source = "arduino-modulino-mpy lib/vl53l4cd.py:66, 91; Modulino.h:938-939"
 
 [[chip]]
 kind = "hs3003"
@@ -61,7 +62,7 @@ module = "light"
 addresses = [0x53]
 id = { method = "register8", register = 0x06, value = 0xC0, mask = 0xF0 }
 verified = true
-source = "Lite-On LTR-381RGB-01 datasheet PART_ID (06h): part number C in the high nibble; Modulino.h:769; modulino-rs 0.3 light.rs:247, 276"
+source = "Lite-On LTR-381RGB-01 datasheet PART_ID (06h): part number C in the high nibble; Modulino.h:769; modulino-rs 0.3 light.rs:247, 292-294"
 
 [[chip]]
 kind = "lps22hb"

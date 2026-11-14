@@ -422,13 +422,16 @@ impl I2c for FakeBus {
                     }
                 }
                 Operation::Read(buf) => {
-                    let mut nacked = false;
+                    // On the wire any device's ACK wins: the read fails
+                    // only if every device here NACKs it.
+                    let mut acked = false;
                     for t in targets.iter_mut() {
-                        if let Target::Chip(c) = t {
-                            nacked |= c.nacks_read();
-                        }
+                        acked |= match t {
+                            Target::Chip(c) => !c.nacks_read(),
+                            _ => true,
+                        };
                     }
-                    if nacked {
+                    if !acked {
                         return Err(Nack(address));
                     }
                     // Open-drain: with several devices answering, a bit

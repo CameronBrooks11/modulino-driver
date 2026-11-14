@@ -18,11 +18,17 @@
 //! so a node never acts on them. Another chip at one of these addresses may:
 //! a register-index write sets its register pointer, and on a part with
 //! 8-bit indexes the VL53L4's 2-byte index (0x01, 0x0F) writes 0x0F to
-//! register 0x01. Scan a bus whose devices you know.
+//! register 0x01, and the SHT31's command (0xF3, 0x2D) writes 0x2D to
+//! register 0xF3. Scan a bus whose devices you know.
 //!
 //! An SHT3x NACKs a read while it has no data, so at its address a NACKed
 //! probe still runs the status check, whose read is retried a bounded
 //! number of times while the sensor prepares the reply.
+//!
+//! The hub check restores the byte the probe read. That is the hub's
+//! control byte unless a second device at the same address sits on a port
+//! that was already connected; then the probe read their wired-AND, and the
+//! restore writes that value to both.
 //!
 //! Known limits:
 //!
@@ -160,16 +166,19 @@ fn is_hub<I: I2c>(bus: &mut I, raw: u8, probe: u8) -> Result<bool, Error<I::Erro
     }
     let mut back = [0u8; 1];
     let read = acked(bus.read(raw, &mut back));
-    let restore = acked(bus.write(raw, &[probe]));
+    // A NACKed restore is an error too: the mask may still be latched.
+    let restore = bus.write(raw, &[probe]).map_err(Error::I2c);
     let hub = read? && back[0] == MASK;
     restore?;
     Ok(hub)
 }
 
-/// How many times the SHT3x status read is retried on a NACK: each try is a
-/// few bit times, so this covers the sensor's sub-millisecond preparation
-/// at 100-400 kHz.
-const SHT3X_READ_TRIES: usize = 40;
+/// How many times the SHT3x status read is retried on a NACK. A NACKed read
+/// is about 11 clock periods, so 200 tries span roughly 2 ms at 1 MHz and
+/// more at slower clocks (an estimate, not a measurement), against the
+/// 1 ms Sensirion's own driver waits after a command. The tries cost
+/// nothing unless a device at the SHT31 address accepted the command.
+const SHT3X_READ_TRIES: usize = 200;
 
 fn is_chip<I: I2c>(bus: &mut I, raw: u8, id: ChipId) -> Result<bool, Error<I::Error>> {
     let mut byte = [0u8; 1];

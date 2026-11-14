@@ -332,7 +332,9 @@ zero-length write, because some HALs (RP2040's I2C block is the known case)
 refuse zero-length writes. Addresses that answer are classified by evidence:
 
 1. **0x70-0x77**: hub check first. Write an odd port mask, read it back,
-   and restore the byte the probe read whatever the read-back shows. A 1-byte write to a node is shorter than any node frame, so a
+   and restore the byte the probe read whatever the read-back shows (with a
+   same-address device on an already connected port, that byte is their
+   wired-AND). A 1-byte write to a node is shorter than any node frame, so a
    node drops it, and a node's read-back is its strap byte, which is always
    even, so it can never echo the mask.
 2. **A chip's datasheet address**: the chip's identity check from

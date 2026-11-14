@@ -317,3 +317,120 @@ fn parent_hub_through_port_2_looks_like_a_latch_relay() {
     let n = scan_except(&mut hub.port(2).unwrap(), &[a(0x70)], &mut out).unwrap();
     assert_eq!(n, 0);
 }
+
+/// Fails the `n`th transaction (1-based) to `addr` with `kind`; otherwise
+/// forwards to the fake bus, reporting its NACKs as address NACKs.
+struct FailNth {
+    bus: FakeBus,
+    addr: u8,
+    n: usize,
+    seen: usize,
+    kind: embedded_hal::i2c::ErrorKind,
+}
+
+impl FailNth {
+    fn new(bus: FakeBus, addr: u8, n: usize, kind: embedded_hal::i2c::ErrorKind) -> Self {
+        Self {
+            bus,
+            addr,
+            n,
+            seen: 0,
+            kind,
+        }
+    }
+}
+
+impl embedded_hal::i2c::ErrorType for FailNth {
+    type Error = embedded_hal::i2c::ErrorKind;
+}
+
+impl embedded_hal::i2c::I2c for FailNth {
+    fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal::i2c::Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        if address == self.addr {
+            self.seen += 1;
+            if self.seen == self.n {
+                return Err(self.kind);
+            }
+        }
+        self.bus.transaction(address, operations).map_err(|_| {
+            embedded_hal::i2c::ErrorKind::NoAcknowledge(
+                embedded_hal::i2c::NoAcknowledgeSource::Address,
+            )
+        })
+    }
+}
+
+fn scan_hub_failing(
+    n: usize,
+    kind: embedded_hal::i2c::ErrorKind,
+) -> (
+    FakeBus,
+    Result<usize, modulino_driver::Error<embedded_hal::i2c::ErrorKind>>,
+) {
+    // Transactions to the hub: 1 probe, 2 mask write, 3 read-back, 4 restore.
+    let mut bus = FailNth::new(FakeBus::with_hubs(vec![FakeHub::new(0x70)]), 0x70, n, kind);
+    let mut out = [Found::Unknown(a(1)); 4];
+    let result = scan(&mut bus, &mut out);
+    (bus.bus, result)
+}
+
+#[test]
+fn hub_read_back_error_still_restores() {
+    let (bus, result) = scan_hub_failing(3, embedded_hal::i2c::ErrorKind::Bus);
+    assert_eq!(
+        result,
+        Err(modulino_driver::Error::I2c(
+            embedded_hal::i2c::ErrorKind::Bus
+        ))
+    );
+    assert_eq!(bus.hub(0x70).control, 0, "restored before the error");
+}
+
+#[test]
+fn nacked_hub_restore_is_an_error() {
+    let nack =
+        embedded_hal::i2c::ErrorKind::NoAcknowledge(embedded_hal::i2c::NoAcknowledgeSource::Data);
+    let (_, result) = scan_hub_failing(4, nack);
+    assert_eq!(result, Err(modulino_driver::Error::I2c(nack)));
+}
+
+#[test]
+fn sht31_status_read_error_stops_the_scan() {
+    // 0x45: probe (NACKed, silent sensor), command, then the status read.
+    let bus = FakeBus {
+        chips: vec![sht31(0)],
+        ..Default::default()
+    };
+    let mut bus = FailNth::new(bus, 0x45, 3, embedded_hal::i2c::ErrorKind::Bus);
+    let mut out = [Found::Unknown(a(1)); 4];
+    assert_eq!(
+        scan(&mut bus, &mut out),
+        Err(modulino_driver::Error::I2c(
+            embedded_hal::i2c::ErrorKind::Bus
+        ))
+    );
+}
+
+#[test]
+fn an_empty_bus_costs_one_probe_per_address() {
+    let mut bus = FakeBus::default();
+    run(&mut bus);
+    // One probe per address, plus the SHT31 status command at 0x45, which
+    // runs after a NACKed probe and stops at its own NACK.
+    assert_eq!(bus.transactions, 0x77 + 1);
+}
+
+#[test]
+fn any_ack_wins_on_a_shared_address() {
+    // A node and a silent SHT31 both at 0x45: the node ACKs the read.
+    use embedded_hal::i2c::I2c;
+    let mut bus = FakeBus {
+        chips: vec![sht31(0)],
+        ..FakeBus::new(vec![FakeNode::new(0x7C, &[0; 3], 3).at(0x45)])
+    };
+    assert!(bus.read(0x45, &mut [0u8; 1]).is_ok());
+}
