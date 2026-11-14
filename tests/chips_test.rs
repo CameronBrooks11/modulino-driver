@@ -210,7 +210,7 @@ mod light {
         let a = 0x53;
         let expectations = [
             T::write(a, vec![0x05, 0x00]),
-            T::write(a, vec![0x04, 0x22]),
+            T::write(a, vec![0x04, 0x31]),
             T::write_read(
                 a,
                 vec![0x0A],
@@ -219,9 +219,23 @@ mod light {
         ];
         let mut light = Light::new(I2cMock::new(&expectations));
         light.set_gain(Gain::X1).unwrap();
-        light.set_timing(Resolution::Bits18, Rate::Ms100).unwrap();
+        light.set_timing(Resolution::Bits17, Rate::Ms50).unwrap();
         let LightReading { lux: got, .. } = light.read().unwrap();
-        assert_eq!(got, 0.8 * 1000.0);
+        // 0.8 * 1000 / (1 x * 0.5)
+        assert_eq!(got, 1600.0);
+        light.release().done();
+    }
+
+    #[test]
+    fn ready_reads_the_data_status_bit() {
+        let a = 0x53;
+        let expectations = [
+            T::write_read(a, vec![0x07], vec![0x08]),
+            T::write_read(a, vec![0x07], vec![0x20]),
+        ];
+        let mut light = Light::new(I2cMock::new(&expectations));
+        assert!(light.ready().unwrap());
+        assert!(!light.ready().unwrap(), "power-on status alone is not data");
         light.release().done();
     }
 

@@ -73,9 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pressure_ready`/`temperature_ready`, and `Pressure::init` now resets
   the chip.
 - `Light` is the new `chips::Ltr381rgb` driver, trimmed to the lux/RGB
-  path (design 4.5). `new` no longer takes a `u8` address
-  (`with_address(Address)`), `verify()` checks `PART_ID`, and `init()`
-  verifies and starts measuring with 0.3's defaults. `read()` returns
+  path (design 4.5). `new_with_address(u8)` is `with_address(Address)`,
+  `verify()` checks `PART_ID` (`WrongChip` where 0.3 returned
+  `DeviceNotFound`), `init()` verifies and starts measuring with 0.3's
+  defaults, and `ready()` reports a new sample (`MAIN_STATUS` bit 3). `read()` returns
   `LightReading` with all four channels from one 12-byte burst, masked
   to 20 bits; 0.3 read them in four transactions. `Gain`, `Resolution`
   and `Rate` (was `MeasurementRate`) live in `chips::ltr381rgb`, with

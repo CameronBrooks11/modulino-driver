@@ -4,13 +4,21 @@
 //! datasheet gives them as I know it: `MAIN_CTRL` 0x00 (0x06 enables the
 //! colour sensor in RGB mode), `MEAS_RATE` 0x04 (resolution in bits 6-4,
 //! rate in bits 2-0), `GAIN` 0x05, `PART_ID` 0x06 (part number 0xC in the
-//! high nibble), `MAIN_STATUS` 0x07, then the 20-bit channels as three
-//! little-endian bytes each: IR 0x0A, green 0x0D, red 0x10, blue 0x13.
+//! high nibble), `MAIN_STATUS` 0x07 (bit 3 set when a new sample is in, cleared
+//! by the read, as Arduino's LTR381RGB library and Arduino's MicroPython
+//! driver both use it), then the 20-bit channels as three little-endian
+//! bytes each: IR 0x0A, green 0x0D, red 0x10, blue 0x13.
 //!
-//! The four channels are read in one 12-byte burst from 0x0A, so they come
-//! from the same measurement; the bench confirms the chip auto-increments
-//! across them. The lux formula and the defaults (18x gain, 16-bit, 25 ms)
-//! are those of modulino-rs 0.3, which took them from Arduino's library.
+//! The four channels are read in one 12-byte burst from 0x0A. Arduino's
+//! library bursts 9 bytes from 0x0D and 6 from 0x0A, so the chip
+//! auto-increments across channels; whether the 12-byte span returns one
+//! measurement is to be confirmed on the bench. The defaults (18x gain,
+//! 16-bit, 25 ms) are Arduino's library's. The lux constants 0.8 and 0.033
+//! are both Arduino libraries'; the cap on the IR ratio is modulino-rs
+//! 0.3's.
+//!
+//! The rate codes above 200 ms differ between Arduino's two libraries
+//! (this follows the C++ one: 0x04 = 400 ms); a bench item.
 
 use embedded_hal::i2c::I2c;
 
@@ -23,6 +31,8 @@ const MAIN_CTRL: u8 = 0x00;
 const MEAS_RATE: u8 = 0x04;
 const GAIN: u8 = 0x05;
 const MAIN_STATUS: u8 = 0x07;
+/// `MAIN_STATUS` bit: a new sample is in the data registers.
+const DATA_NEW: u8 = 0x08;
 const DATA_IR: u8 = 0x0A;
 
 /// Colour sensor on, RGB mode.
@@ -193,6 +203,18 @@ impl<I2C: I2c> Ltr381rgb<I2C> {
         self.regs.write(MAIN_CTRL, MAIN_CTRL_RGB)
     }
 
+    /// Whether a new sample has arrived since the last call. Reading the
+    /// status clears the flag.
+    ///
+    /// After [`init`](Self::init), the data registers hold no sample until
+    /// the first integration ends; after [`set_gain`](Self::set_gain) or
+    /// [`set_timing`](Self::set_timing), the sample in the registers may
+    /// still be from the old settings while lux is computed with the new
+    /// ones. Wait for this, then read.
+    pub fn ready(&mut self) -> Result<bool, Error<I2C::Error>> {
+        Ok(self.regs.read(MAIN_STATUS)? & DATA_NEW != 0)
+    }
+
     /// Set the gain. The lux calculation follows it.
     pub fn set_gain(&mut self, gain: Gain) -> Result<(), Error<I2C::Error>> {
         self.regs.write(GAIN, gain as u8)?;
@@ -213,7 +235,8 @@ impl<I2C: I2c> Ltr381rgb<I2C> {
         Ok(())
     }
 
-    /// Read all four channels in one burst, and the lux they give.
+    /// Read all four channels in one burst, and the lux they give. This
+    /// does not wait for a new sample; see [`ready`](Self::ready).
     pub fn read(&mut self) -> Result<LightReading, Error<I2C::Error>> {
         let mut b = [0u8; 12];
         self.regs.read_into(DATA_IR, &mut b)?;
