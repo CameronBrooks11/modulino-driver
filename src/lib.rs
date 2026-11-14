@@ -51,9 +51,11 @@
 #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
-mod buttons;
+mod addr;
 mod buzzer;
+pub mod codec;
 mod color;
+mod devices;
 mod distance;
 mod error;
 mod hub;
@@ -65,15 +67,19 @@ mod led_matrix;
 mod light;
 mod motors;
 mod movement;
+mod node;
 mod opto_relay;
 mod pixels;
 mod pressure;
+pub mod spec;
 mod thermo;
 mod vibro;
 
-pub use buttons::{ButtonLed, ButtonState, Buttons};
+pub use addr::{Address, NewAddress, Strap};
 pub use buzzer::{Buzzer, Note};
+pub use codec::buttons::ButtonState;
 pub use color::Color;
+pub use devices::buttons::Buttons;
 pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
@@ -85,9 +91,11 @@ pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use motors::{DecayMode, Motors};
 pub use movement::{Movement, MovementValues};
+pub use node::Node;
 pub use opto_relay::OptoRelay;
 pub use pixels::Pixels;
 pub use pressure::Pressure;
+pub use spec::Kind;
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 pub use vibro::{PowerLevel, Vibro};
 
@@ -96,9 +104,6 @@ pub use vibro::{PowerLevel, Vibro};
 /// These are the factory-default 7-bit I2C addresses. Some modules support
 /// multiple addresses via hardware configuration (solder jumpers).
 pub mod addresses {
-    /// Default address for Modulino Buttons (0x7C >> 1 = 0x3E)
-    pub const BUTTONS: u8 = 0x3E;
-
     /// Default address for Modulino Buzzer (0x3C >> 1 = 0x1E)
     pub const BUZZER: u8 = 0x1E;
 
@@ -152,9 +157,6 @@ pub mod addresses {
 pub mod pinstrap {
     /// Pinstrap address for Buzzer
     pub const BUZZER: u8 = 0x3C;
-
-    /// Pinstrap address for Buttons
-    pub const BUTTONS: u8 = 0x7C;
 
     /// Pinstrap addresses for Knob
     pub const KNOB: [u8; 2] = [0x76, 0x74];

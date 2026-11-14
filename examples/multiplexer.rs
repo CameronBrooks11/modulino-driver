@@ -62,29 +62,23 @@ fn main() {
     // behind the Hub's ports 0 and 1. We must select the appropriate port before
     // initializing each button module.
 
-    // Select port 0 on the multiplexer and initialize Buttons A
-    hub.select(0).unwrap();
-    let mut buttons_a = Buttons::new(SharedI2c(&shared_i2c)).unwrap();
-
-    // Select port 1 on the multiplexer and initialize Buttons B
-    hub.select(1).unwrap();
-    let mut buttons_b = Buttons::new(SharedI2c(&shared_i2c)).unwrap();
+    // Constructors do no I/O, so neither needs its port selected yet.
+    let mut buttons_a = Buttons::new(SharedI2c(&shared_i2c));
+    let mut buttons_b = Buttons::new(SharedI2c(&shared_i2c));
 
     loop {
         // --- Read Buttons A (on multiplexer Port 0) ---
         hub.select(0).unwrap();
         if let Ok(state) = buttons_a.read() {
-            // Toggle corresponding LED based on button A state
-            buttons_a.led_a.set(state.a);
-            buttons_a.update_leds().unwrap();
+            // Light LED A while button A is pressed
+            buttons_a.set_leds(state.a, false, false).unwrap();
         }
 
         // --- Read Buttons B (on multiplexer Port 1) ---
         hub.select(1).unwrap();
         if let Ok(state) = buttons_b.read() {
-            // Toggle corresponding LED based on button A state
-            buttons_b.led_a.set(state.a);
-            buttons_b.update_leds().unwrap();
+            // Light LED A while button A is pressed
+            buttons_b.set_leds(state.a, false, false).unwrap();
         }
 
         // Add a brief delay before the next polling cycle

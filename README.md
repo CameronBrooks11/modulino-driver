@@ -75,17 +75,14 @@ pixels.show()?;
 ```rust
 use modulino_driver::Buttons;
 
-let mut buttons = Buttons::new(i2c)?;
+// Constructors do no I/O; verify() checks the board's identity.
+let mut buttons = Buttons::new(i2c);
+buttons.verify()?;
 
 loop {
-    // Read button states
+    // Light each LED while its button is pressed
     let state = buttons.read()?;
-    
-    // Update LEDs to match button states
-    buttons.led_a.set(state.a);
-    buttons.led_b.set(state.b);
-    buttons.led_c.set(state.c);
-    buttons.update_leds()?;
+    buttons.set_leds(state.a, state.b, state.c)?;
 }
 ```
 
@@ -340,18 +337,19 @@ All Modulino devices communicate over I2C at 100kHz. They use the Qwiic/STEMMA Q
 Some modules can have their address changed. You can specify a custom address when creating a driver:
 
 ```rust
-use modulino_driver::{Buttons, addresses};
+use modulino_driver::{Address, Buttons};
 
 // Use default address
-let buttons = Buttons::new(i2c)?;
+let buttons = Buttons::new(i2c);
 
-// Use custom address
-let buttons = Buttons::new_with_address(i2c, 0x40)?;
+// Use custom address (7-bit, 0x01..=0x77)
+let buttons = Buttons::with_address(i2c, Address::new(0x40).unwrap());
 ```
 
 ## Minimum Supported Rust Version (MSRV)
 
-This crate requires Rust 1.75 or later.
+The library requires Rust 1.75 or later. The test suite's dev-dependencies
+need a newer toolchain.
 
 ## License
 

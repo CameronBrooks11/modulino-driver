@@ -1,0 +1,120 @@
+# Modulino node boards: the protocol constants of Arduino's node firmware.
+#
+# Every board here runs node_modulino_firmware on an STM32C011. Its board
+# type comes from strap pins, read into an even byte that the firmware also
+# uses as its 8-bit I2C own-address, so the default 7-bit address is
+# strap >> 1; where a kind has two straps, the first gives the default
+# address. A read returns the strap byte followed by `read_payload` bytes.
+# The firmware acts on a write once it has received exactly its `write_len`
+# bytes: a shorter write is dropped; a longer one has its first bytes
+# processed (STM32C0 HAL I2C_Slave_ISR_IT), and what the bus does with the
+# rest is unverified. A board with modes lists one length per
+# mode, otherwise the single length is named `default`.
+#
+# Source lines cite `file` at `commit`. src/spec.rs mirrors this file and
+# tests/spec_conformance.rs fails when they disagree.
+
+[firmware]
+repo = "arduino/node_modulino_firmware"
+commit = "7d578e0"
+file = "Core/Src/main.c"
+
+[[node]]
+kind = "buttons"
+revision = 1
+image = "node"
+straps = [0x7C]
+read_payload = 3
+write_len = { default = 3 }
+source = { strap = "main.c:32", read = "main.c:478-482", write = "main.c:544-545", handler = "main.c:257-261" }
+
+[[node]]
+kind = "buzzer"
+revision = 1
+image = "node"
+straps = [0x3C]
+# The firmware has no read case for this kind: the payload is whatever the
+# shared buffer last held.
+read_payload = 3
+write_len = { default = 8 }
+source = { strap = "main.c:33", read = "main.c:528", write = "main.c:546-547", handler = "main.c:262-283" }
+
+[[node]]
+kind = "vibro"
+revision = 1
+image = "node"
+straps = [0x70]
+# No read case, as for the buzzer.
+read_payload = 3
+write_len = { default = 12 }
+source = { strap = "main.c:36", read = "main.c:528", write = "main.c:548-549", handler = "main.c:284-297" }
+
+[[node]]
+kind = "knob"
+revision = 1
+image = "node"
+# Arduino_Modulino (Modulino.h:519) and arduino-modulino-mpy (knob.py:12)
+# both try 0x74 first.
+straps = [0x74, 0x76]
+read_payload = 3
+write_len = { default = 4 }
+source = { strap = "main.c:34-35", read = "main.c:483-488", write = "main.c:550-552", handler = "main.c:298-306" }
+
+[[node]]
+kind = "pixels"
+revision = 1
+image = "node"
+straps = [0x6C]
+# The firmware returns 32 bytes after the strap without writing them.
+read_payload = 32
+write_len = { default = 32 }
+source = { strap = "main.c:37", read = "main.c:489-490", write = "main.c:553-554", handler = "main.c:307-309" }
+
+[[node]]
+kind = "joystick"
+revision = 1
+image = "node"
+straps = [0x58]
+read_payload = 3
+# The firmware accepts and ignores a 3-byte write; the driver never writes.
+write_len = { default = 3 }
+source = { strap = "main.c:38", read = "main.c:491-495", write = "main.c:560", handler = "main.c:310-311" }
+
+[[node]]
+kind = "opto_relay"
+revision = 1
+image = "node"
+straps = [0x28]
+read_payload = 3
+write_len = { default = 3 }
+source = { strap = "main.c:39", read = "main.c:496-500", write = "main.c:542-545", handler = "main.c:312-314" }
+
+[[node]]
+kind = "latch_relay"
+revision = 1
+image = "node"
+straps = [0x04]
+read_payload = 3
+write_len = { default = 3 }
+source = { strap = "main.c:40", read = "main.c:501-505", write = "main.c:542-545", handler = "main.c:315-323" }
+
+[[node]]
+kind = "led_matrix"
+revision = 1
+# Built from the same main.c with MODULINO_LEDMATRIX_BUILD defined
+# (build.sh:26), which forces the strap instead of reading pins.
+image = "matrix"
+straps = [0x72]
+read_payload = 3
+write_len = { mono = 12, grayscale = 48 }
+source = { strap = "main.c:41, 821-823", read = "main.c:506-516", write = "main.c:555-556", handler = "main.c:324-340" }
+
+[[node]]
+kind = "motors"
+revision = 1
+# Built from the same main.c with MODULINO_MOTORS_BUILD defined.
+image = "motors"
+straps = [0x48]
+read_payload = 5
+write_len = { default = 8 }
+source = { strap = "main.c:42", read = "main.c:517-525", write = "main.c:557-558", handler = "main.c:341-344" }

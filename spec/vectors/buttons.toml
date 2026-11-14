@@ -1,0 +1,35 @@
+# Codec vectors for Modulino Buttons (spec/nodes.toml kind "buttons").
+#
+# decode: read payload (bytes after the strap) -> which buttons are pressed.
+# The firmware sends !pin per button, 0 or 1 (main.c:478-482); any non-zero
+# byte counts as pressed.
+# encode_leds: LED states -> write frame (main.c:257-261 lights an LED for
+# any non-zero byte).
+
+[[decode]]
+input = [0x00, 0x00, 0x00]
+expect = { a = false, b = false, c = false }
+
+[[decode]]
+input = [0x00, 0x01, 0x00]
+expect = { a = false, b = true, c = false }
+
+[[decode]]
+input = [0x01, 0x01, 0x01]
+expect = { a = true, b = true, c = true }
+
+[[decode]]
+input = [0xFF, 0x00, 0x02]
+expect = { a = true, b = false, c = true }
+
+[[encode_leds]]
+args = { a = false, b = false, c = false }
+expect = [0x00, 0x00, 0x00]
+
+[[encode_leds]]
+args = { a = true, b = false, c = true }
+expect = [0x01, 0x00, 0x01]
+
+[[encode_leds]]
+args = { a = true, b = true, c = true }
+expect = [0x01, 0x01, 0x01]
