@@ -654,3 +654,70 @@ mod distance {
         ed.start_ranging(&mut FakeDelay::default()).unwrap();
     }
 }
+
+mod failure_paths {
+    use super::*;
+    use embedded_hal::i2c::{ErrorKind, NoAcknowledgeSource};
+    use modulino_driver::chips::ltr381rgb::{lux, Gain, Rate, Resolution};
+    use modulino_driver::spec::sensirion_crc8;
+    use modulino_driver::{Light, Thermo};
+
+    const NACK: ErrorKind = ErrorKind::NoAcknowledge(NoAcknowledgeSource::Data);
+    const LIGHT: u8 = 0x53;
+    /// IR 0, green 1000, red and blue 0.
+    const BURST: [u8; 12] = [0, 0, 0, 0xE8, 0x03, 0, 0, 0, 0, 0, 0, 0];
+
+    #[test]
+    fn a_failed_set_gain_keeps_the_old_gain() {
+        let expectations = [
+            T::write(LIGHT, vec![0x05, Gain::X1 as u8]).with_error(NACK),
+            T::write_read(LIGHT, vec![0x0A], BURST.to_vec()),
+        ];
+        let mut light = Light::new(I2cMock::new(&expectations));
+        assert!(light.set_gain(Gain::X1).is_err());
+        let reading = light.read().unwrap();
+        // Still the default gain and resolution.
+        assert_eq!(reading.lux, lux(1000, 0, Gain::X18, Resolution::Bits16));
+        light.release().done();
+    }
+
+    #[test]
+    fn a_failed_set_timing_is_an_error_and_keeps_the_old_resolution() {
+        let code = (Resolution::Bits20 as u8) << 4 | Rate::Ms100 as u8;
+        let expectations = [
+            T::write(LIGHT, vec![0x04, code]).with_error(NACK),
+            T::write_read(LIGHT, vec![0x0A], BURST.to_vec()),
+        ];
+        let mut light = Light::new(I2cMock::new(&expectations));
+        assert_eq!(
+            light.set_timing(Resolution::Bits20, Rate::Ms100),
+            Err(Error::I2c(NACK))
+        );
+        let reading = light.read().unwrap();
+        assert_eq!(reading.lux, lux(1000, 0, Gain::X18, Resolution::Bits16));
+        light.release().done();
+    }
+
+    #[test]
+    fn an_sht31_that_never_releases_its_status_is_a_timeout() {
+        // Nothing at 0x44; at 0x45 the command is accepted and every
+        // status read NACKs.
+        let status = [0x80, 0x10];
+        let mut sht = FakeChip::new(0x45, 1).command(
+            &[0xF3, 0x2D],
+            &[status[0], status[1], sensirion_crc8(&status)],
+        );
+        sht.nack_idle_reads = true;
+        // Finite, so an unbounded retry loop fails instead of hanging.
+        sht.reply_after = 1000;
+        let mut thermo = Thermo::new(chips(vec![sht]));
+        assert_eq!(thermo.verify(), Err(Error::Timeout));
+    }
+
+    #[test]
+    fn a_failed_movement_verify_keeps_the_first_address() {
+        let mut movement = Movement::new(FakeBus::default());
+        assert!(movement.verify().is_err());
+        assert_eq!(movement.address(), Address::new(0x6A).unwrap());
+    }
+}
