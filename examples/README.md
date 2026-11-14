@@ -62,7 +62,7 @@ fn main() -> ! {
 
 ```rust
 use stm32f4xx_hal::{i2c::I2c, prelude::*};
-use modulino_driver::{Buttons, ButtonState};
+use modulino_driver::Buttons;
 
 #[entry]
 fn main() -> ! {
@@ -76,7 +76,8 @@ fn main() -> ! {
     
     let i2c = I2c::new(dp.I2C1, (scl, sda), 100.kHz(), &clocks);
     
-    let mut buttons = Buttons::new(i2c).unwrap();
+    let mut buttons = Buttons::new(i2c);
+    buttons.verify().unwrap();
     
     loop {
         let state = buttons.read().unwrap();

@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use crate::spec::Kind;
+
 /// Error type for Modulino operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -20,6 +22,23 @@ pub enum Error<E> {
     Timeout,
     /// Data transmission error
     DataError,
+    /// A node answered with a strap byte that is not one of its kind's.
+    WrongIdentity {
+        /// The kind the caller addressed
+        expected: Kind,
+        /// The strap byte the board sent
+        got: u8,
+    },
+    /// A frame length the node does not accept; nothing was sent.
+    FrameLength {
+        /// A length the node accepts
+        expected: usize,
+        /// The length given
+        got: usize,
+    },
+    /// A data frame starts with a firmware command prefix (`CF` or `DIE`)
+    /// and would be executed as that command; nothing was sent.
+    ReservedPrefix,
 }
 
 impl<E> From<E> for Error<E> {
@@ -38,6 +57,21 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
             Error::OutOfRange => write!(f, "Value out of range"),
             Error::Timeout => write!(f, "Operation timed out"),
             Error::DataError => write!(f, "Data transmission error"),
+            Error::WrongIdentity { expected, got } => {
+                write!(
+                    f,
+                    "expected a {:?} node, got strap byte {:#04x}",
+                    expected, got
+                )
+            }
+            Error::FrameLength { expected, got } => {
+                write!(
+                    f,
+                    "frame length {} not accepted, expected {}",
+                    got, expected
+                )
+            }
+            Error::ReservedPrefix => write!(f, "frame starts with a firmware command prefix"),
         }
     }
 }
