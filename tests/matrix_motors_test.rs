@@ -99,8 +99,11 @@ fn matrix_failing_writes(grayscale: bool, n: usize) -> LedMatrix<FakeBus> {
 fn a_failed_mode_switch_does_not_cache_the_target() {
     let mut matrix = matrix_failing_writes(false, 1);
     assert!(matrix.set_mode(MatrixMode::Grayscale).is_err());
-    // The board never took the command: still mono, read again.
+    // The board never took the command: still mono, read again. The driver
+    // must not trust its old mode either (the board may have switched):
+    // read, the failed command, then a fresh read.
     assert_eq!(matrix.mode().unwrap(), MatrixMode::Mono);
+    assert_eq!(matrix.release().transactions, 3);
 }
 
 #[test]
