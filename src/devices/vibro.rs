@@ -52,7 +52,7 @@ impl<I2C: I2c> Vibro<I2C> {
         self.on_with_power(duration_ms, power as u8)
     }
 
-    /// Vibrate for `duration_ms` at `power` percent duty, 0-100.
+    /// Vibrate for `duration_ms` (at least 1) at `power` percent duty, 0-100.
     pub fn on_with_power(&mut self, duration_ms: u32, power: u8) -> Result<(), Error<I2C::Error>> {
         self.node
             .write(&codec::encode_on(duration_ms, power).map_err(OutOfRange::into_error)?)

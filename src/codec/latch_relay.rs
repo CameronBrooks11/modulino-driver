@@ -13,6 +13,17 @@ use crate::spec::LATCH_RELAY;
 pub const READ_PAYLOAD: usize = LATCH_RELAY.read_payload;
 /// Bytes in a frame.
 pub const WRITE_LEN: usize = LATCH_RELAY.write_len.fixed();
+/// How long to leave the board alone after a command, in ms.
+///
+/// The firmware handles the command in its main loop with two
+/// `HAL_Delay(50)` calls, each up to 52 ms with the HAL's added tick, and
+/// re-reads the command byte from the I2C buffer after each
+/// (main.c:315-323). Any I2C transfer to the board meanwhile runs in the
+/// I2C interrupt and overwrites that byte: a read stores the strap byte
+/// (main.c:475, 571-580), which is non-zero, so a reset in progress pulses
+/// the set coil. 120 ms covers both delays with margin; the bench confirms
+/// it.
+pub const SETTLE_MS: u32 = 120;
 
 /// Encode a set (`true`) or reset (`false`).
 pub fn encode(on: bool) -> [u8; WRITE_LEN] {

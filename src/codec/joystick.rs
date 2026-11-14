@@ -28,9 +28,9 @@ pub struct JoystickRaw {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct JoystickState {
-    /// X, -128 to 127, 0 at rest
+    /// X, -127 to 127, 0 at rest
     pub x: i8,
-    /// Y, -128 to 127, 0 at rest
+    /// Y, -127 to 127, 0 at rest
     pub y: i8,
     /// The stick is pressed
     pub pressed: bool,

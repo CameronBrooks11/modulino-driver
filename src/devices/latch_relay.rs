@@ -1,6 +1,7 @@
 //! Modulino Latch Relay: a bistable relay that keeps its position without
 //! power.
 
+use embedded_hal::delay::DelayNs;
 use embedded_hal::i2c::I2c;
 
 use crate::addr::Address;
@@ -18,7 +19,7 @@ use crate::Error;
 ///
 /// let mut relay = LatchRelay::new(i2c);
 /// relay.verify()?;
-/// relay.on()?;
+/// relay.on(&mut delay)?;
 /// assert_eq!(relay.state()?, Some(true));
 /// ```
 #[derive(Debug)]
@@ -49,20 +50,26 @@ impl<I2C: I2c> LatchRelay<I2C> {
         self.node.verify()
     }
 
-    /// Set (`true`) or reset (`false`) the relay. The firmware pulses the
-    /// coil for about 100 ms before it reads the bus again.
-    pub fn set(&mut self, on: bool) -> Result<(), Error<I2C::Error>> {
-        self.node.write(&codec::encode(on))
+    /// Set (`true`) or reset (`false`) the relay, then wait
+    /// [`SETTLE_MS`](codec::SETTLE_MS) while the firmware pulses the coil.
+    ///
+    /// Any transfer to this board during the pulse can change which coil
+    /// the firmware drives, so nothing else may address it until this
+    /// returns. Other boards on the bus are unaffected.
+    pub fn set(&mut self, on: bool, delay: &mut impl DelayNs) -> Result<(), Error<I2C::Error>> {
+        self.node.write(&codec::encode(on))?;
+        delay.delay_ms(codec::SETTLE_MS);
+        Ok(())
     }
 
-    /// Set the relay.
-    pub fn on(&mut self) -> Result<(), Error<I2C::Error>> {
-        self.set(true)
+    /// Set the relay; see [`LatchRelay::set`].
+    pub fn on(&mut self, delay: &mut impl DelayNs) -> Result<(), Error<I2C::Error>> {
+        self.set(true, delay)
     }
 
-    /// Reset the relay.
-    pub fn off(&mut self) -> Result<(), Error<I2C::Error>> {
-        self.set(false)
+    /// Reset the relay; see [`LatchRelay::set`].
+    pub fn off(&mut self, delay: &mut impl DelayNs) -> Result<(), Error<I2C::Error>> {
+        self.set(false, delay)
     }
 
     /// The last commanded position: `None` if the board has had no command

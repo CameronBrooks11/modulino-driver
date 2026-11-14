@@ -169,3 +169,16 @@ impl I2c for FakeBus {
         Ok(())
     }
 }
+
+/// A delay that only records how long it was asked to wait.
+#[derive(Debug, Default)]
+pub struct FakeDelay {
+    /// Total requested, in nanoseconds.
+    pub total_ns: u64,
+}
+
+impl embedded_hal::delay::DelayNs for FakeDelay {
+    fn delay_ns(&mut self, ns: u32) {
+        self.total_ns += ns as u64;
+    }
+}

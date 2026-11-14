@@ -1,9 +1,10 @@
 # Codec vectors for Modulino Buzzer (spec/nodes.toml kind "buzzer").
 #
 # encode_tone: frequency (Hz) and duration (ms) -> 8-byte frame, both u32 LE
-# (main.c:262-283). Below 180 Hz the firmware's 16-bit timer period
-# 0xFFFF * 180 / f overflows, so the codec refuses it. Duration 0 plays
-# until the next frame.
+# (main.c:262-283). The firmware sets its 16-bit timer period to
+# 0xFFFF * 180 / f and the compare to half of it (main.c:276-279): below
+# 180 Hz the period overflows, above 5898150 Hz the compare is 0, so the
+# codec refuses both. Duration 0 plays until the next frame.
 # encode_stop: frequency 0, duration 0, which the firmware treats as stop.
 # `node = "reserved_prefix"` marks a frame the node layer refuses because
 # the firmware would execute it as a command: 17987 = 0x4643 encodes as
@@ -23,6 +24,14 @@ error = "out_of_range"
 
 [[encode_tone]]
 args = { frequency_hz = 0, duration_ms = 100 }
+error = "out_of_range"
+
+[[encode_tone]]
+args = { frequency_hz = 5898150, duration_ms = 1 }
+expect = [0xA6, 0xFF, 0x59, 0x00, 0x01, 0x00, 0x00, 0x00]
+
+[[encode_tone]]
+args = { frequency_hz = 5898151, duration_ms = 1 }
 error = "out_of_range"
 
 [[encode_tone]]

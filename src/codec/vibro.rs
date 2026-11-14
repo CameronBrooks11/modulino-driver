@@ -1,9 +1,11 @@
 //! Modulino Vibro frames.
 //!
 //! Write frame: PWM frequency in Hz, duration in ms, duty in percent, each
-//! u32 LE (main.c:284-297). The motor stops when the duration has passed, so
-//! a frame of all zeros stops it on the firmware's next loop
-//! (main.c:182-185). The read payload carries nothing for this kind.
+//! u32 LE (main.c:284-297). The motor stops once the duration has passed
+//! (main.c:182-185), so a duration of 0 stops it within a millisecond and is
+//! refused by [`encode_on`]; the all-zero frame is the stop. Its zero
+//! frequency divides by zero in the firmware, which on the Cortex-M0+ yields
+//! 0. The read payload carries nothing for this kind.
 
 use super::OutOfRange;
 use crate::spec::VIBRO;
@@ -37,9 +39,9 @@ pub enum PowerLevel {
     Maximum = 50,
 }
 
-/// Encode a vibration of `duration_ms` at `power` percent duty.
+/// Encode a vibration of `duration_ms` (at least 1) at `power` percent duty.
 pub fn encode_on(duration_ms: u32, power: u8) -> Result<[u8; WRITE_LEN], OutOfRange> {
-    if power > MAX_POWER {
+    if duration_ms == 0 || power > MAX_POWER {
         return Err(OutOfRange);
     }
     Ok(frame(FREQUENCY, duration_ms, power as u32))

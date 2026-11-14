@@ -226,7 +226,11 @@ impl<I2C: I2c> Node<I2C> {
   loop with one buffer shared by RX and TX (`main.c:476, 574-578`), so a read
   issued too soon after a write might corrupt it. This is unmeasured. If the
   bench shows it, `Node` gains an optional minimum gap; until then no
-  `DelayNs` is needed on node devices.
+  `DelayNs` is needed on node devices. The latch relay is the exception:
+  its handler re-reads the command byte between two 50 ms delays
+  (`main.c:315-323`), and any transfer to the board meanwhile overwrites
+  it from the I2C interrupt (`main.c:571-580`). That window is certain,
+  not a race, so `LatchRelay::set` takes a `DelayNs` and waits it out.
 
 ### 4.4 Codecs (`codec/`)
 

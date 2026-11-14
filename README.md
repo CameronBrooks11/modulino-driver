@@ -188,16 +188,17 @@ use modulino_driver::LatchRelay;
 // Factory address 0x02
 let mut relay = LatchRelay::new(i2c);
 
-// Set the relay
-relay.on()?;
+// Set the relay. This waits 120 ms while the firmware pulses the coil:
+// any transfer to the board in that window can drive the wrong coil.
+relay.on(&mut delay)?;
 
 // Last commanded state; None until the first command after power-up
 if relay.state()? == Some(true) {
     println!("Relay is ON");
 }
 
-// Turn off
-relay.off()?;
+// Reset
+relay.off(&mut delay)?;
 ```
 
 ### Example: IMU (Accelerometer/Gyroscope)

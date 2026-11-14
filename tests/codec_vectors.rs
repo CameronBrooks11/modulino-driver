@@ -23,6 +23,29 @@ fn load(kind: &str, ops: &[&str]) -> Table {
     doc
 }
 
+/// Every file in spec/vectors/ has a runner below.
+#[test]
+fn every_vector_file_runs() {
+    let dir = format!("{}/spec/vectors", env!("CARGO_MANIFEST_DIR"));
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .expect("spec/vectors")
+        .map(|e| e.expect("entry").file_name().into_string().expect("utf-8"))
+        .filter(|name| name.ends_with(".toml"))
+        .collect();
+    files.sort_unstable();
+    let run = [
+        "buttons.toml",
+        "buzzer.toml",
+        "joystick.toml",
+        "knob.toml",
+        "latch_relay.toml",
+        "opto_relay.toml",
+        "pixels.toml",
+        "vibro.toml",
+    ];
+    assert_eq!(files, run);
+}
+
 fn cases<'a>(doc: &'a Table, op: &str) -> &'a [Value] {
     let cases = doc[op].as_array().expect("array of cases");
     assert!(!cases.is_empty(), "no {op} cases");
@@ -191,8 +214,9 @@ fn pixels_vectors() {
     let doc = load("pixels", &["brightness_from_percent", "encode"]);
     for case in cases(&doc, "brightness_from_percent") {
         let got = pixels::brightness_from_percent(arg(case, "percent"));
-        match case.get("error") {
-            Some(_) => assert_eq!(got, Err(OutOfRange), "{case:?}"),
+        match case.get("error").and_then(Value::as_str) {
+            Some("out_of_range") => assert_eq!(got, Err(OutOfRange), "{case:?}"),
+            Some(other) => panic!("unknown error {other:?}"),
             None => assert_eq!(got.map(i64::from), Ok(int(&case["expect"])), "{case:?}"),
         }
     }

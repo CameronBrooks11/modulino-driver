@@ -146,7 +146,7 @@ impl<I2C: I2c> Buzzer<I2C> {
 
     /// Play `frequency_hz` for `duration_ms`; 0 plays until the next call.
     ///
-    /// Below 180 Hz is `OutOfRange`. A frequency whose frame would start
+    /// Outside 180-5 898 150 Hz is `OutOfRange`. A frequency whose frame would start
     /// with a firmware command (17987 Hz encodes as `CF`) is
     /// `ReservedPrefix`.
     pub fn tone(&mut self, frequency_hz: u32, duration_ms: u32) -> Result<(), Error<I2C::Error>> {

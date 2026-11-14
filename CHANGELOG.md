@@ -22,14 +22,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LatchRelay` are rebuilt on the node core with pure codecs, in the same
   shape as `Buttons`: `new`/`with_address(Address)` do no I/O,
   `verify()`, and reads return values or errors, never cached state.
-  - `Buzzer::tone` and `Vibro::on` take `u32` values; a tone with
-    duration 0 plays until the next call.
+  - `Buzzer::tone` and `Vibro::on` take `u32` values. A tone with
+    duration 0 plays until the next call; `tone(0, _)`, which 0.3 sent as
+    silence, is `OutOfRange` (use `no_tone`), as is anything above
+    5 898 150 Hz. `Vibro::on` refuses a duration of 0, which the firmware
+    stops at once.
   - `Knob::set_position` keeps the offset on the host and never writes
     the board; `read()` returns `KnobState`.
-  - `Pixels::set`/`set_all` replace `set_color`/`set_all_color`.
+  - `Pixels::set`/`set_all` replace `set_color`/`set_all_color`, and the
+    setters no longer return `&mut Self` for chaining.
   - `Joystick::read()` returns `JoystickState` centred on zero (raw 0 now
     gives 127 rather than overflowing); `read_raw()` gives the ADC values.
-  - `OptoRelay::is_on()` and `LatchRelay::state()` read the board.
+  - `OptoRelay::is_on()` and `LatchRelay::state()` (was `is_on`) read
+    the board.
+  - `LatchRelay::set`/`on`/`off` take a `DelayNs` and wait 120 ms after
+    the command: the firmware re-reads the command byte during its
+    100 ms coil pulse, and any transfer to the board meanwhile overwrites
+    it (main.c:315-323, 571-580).
+  - `Buzzer::MIN_FREQUENCY`, `Vibro::DEFAULT_FREQUENCY` and
+    `Joystick::DEFAULT_DEADZONE` move to `codec::buzzer::MIN_FREQUENCY`,
+    `codec::vibro::FREQUENCY` and `codec::joystick::DEFAULT_DEADZONE`.
 
 ### Added
 
@@ -43,7 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `Vibro::off` sends the full 12-byte frame. 0.3 sent 8 bytes, which the
-  firmware drops (main.c:548-549), so the motor kept running.
+  firmware drops (main.c:548-549), so the motor ran on until its
+  commanded duration ended. Read from the firmware source; not yet
+  observed on hardware.
 - A Buzzer frequency whose frame starts with `CF` or `DIE` (17987 Hz is
   `CF`) is refused instead of being executed by the firmware as an
   address change or bootloader jump.
@@ -60,7 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reset`/`pressed`/the range and direction helpers; the `Pixels`
   per-channel, range and brightness-only setters and `set_color_show`;
   `Joystick::update` and its cached getters, `magnitude` and `angle`;
-  `toggle` and the cached getters on both relays.
+  `toggle` and the cached getters on both relays, `OptoRelay::update`;
+  `Pixels::clear_range`; `PowerLevel::value` and `From<PowerLevel> for
+  u8` (use `as u8`).
 
 ## [0.3.0] - 2026-07-02
 

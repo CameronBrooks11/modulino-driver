@@ -2,11 +2,15 @@
 
 mod support;
 
+use modulino_driver::codec::latch_relay::SETTLE_MS;
 use modulino_driver::{
     Address, Buzzer, Color, Error, Joystick, JoystickState, Kind, Knob, KnobState, LatchRelay,
     Note, OptoRelay, Pixels, PowerLevel, Vibro,
 };
-use support::{FakeBus, FakeNode};
+use support::{FakeBus, FakeDelay, FakeNode};
+
+// Two HAL_Delay(50) calls can take 104 ms (main.c:315-323).
+const _: () = assert!(SETTLE_MS >= 104);
 
 fn bus(strap: u8, payload: &[u8], write_len: usize) -> FakeBus {
     FakeBus::new(vec![FakeNode::new(strap, payload, write_len)])
@@ -46,7 +50,9 @@ fn buzzer_plays_and_stops() {
 fn buzzer_refuses_what_the_firmware_cannot_play() {
     let mut buzzer = Buzzer::new(bus(0x3C, &[0; 3], 8));
     assert_eq!(buzzer.tone(179, 100), Err(Error::OutOfRange));
-    // 17987 Hz encodes as "CF": sent raw, it would readdress the board.
+    assert_eq!(buzzer.tone(u32::MAX, 100), Err(Error::OutOfRange));
+    // 17987 Hz encodes as "CF" 0x00: sent raw, the firmware would rewrite
+    // the address in flash (back to the strap default) and reset.
     assert_eq!(buzzer.tone(17987, 100), Err(Error::ReservedPrefix));
     let bus = buzzer.release();
     let board = bus.node(0x1E);
@@ -61,6 +67,7 @@ fn vibro_off_sends_the_full_frame() {
     vibro.off().unwrap();
     let bus = vibro.release();
     let board = bus.node(0x38);
+    assert_eq!(board.frames[0][8], PowerLevel::Medium as u8, "duty byte");
     // The motor stops only if the board processed the off frame.
     assert_eq!(board.frames.last(), Some(&vec![0u8; 12]));
     assert_eq!((board.frames.len(), board.dropped), (2, 0));
@@ -70,6 +77,7 @@ fn vibro_off_sends_the_full_frame() {
 fn vibro_power_is_a_percentage() {
     let mut vibro = Vibro::new(bus(0x70, &[0; 3], 12));
     assert_eq!(vibro.on_with_power(100, 101), Err(Error::OutOfRange));
+    assert_eq!(vibro.on_with_power(0, 50), Err(Error::OutOfRange));
     vibro.on_with_power(100, 100).unwrap();
 }
 
@@ -108,16 +116,24 @@ fn pixels_show_sends_the_whole_frame() {
     assert_eq!(pixels.set(8, Color::RED, 100), Err(Error::OutOfRange));
     assert_eq!(pixels.set(0, Color::RED, 101), Err(Error::OutOfRange));
     pixels.show().unwrap();
+    pixels.clear(0).unwrap();
+    pixels.show().unwrap();
+    pixels.set_all(Color::BLUE, 100).unwrap();
+    pixels.show().unwrap();
     pixels.clear_all();
     pixels.show().unwrap();
 
     let bus = pixels.release();
     let frames = &bus.node(0x36).frames;
-    let mut lit = [0xE0u8, 0, 0, 0].repeat(8);
+    let off = [0xE0u8, 0, 0, 0];
+    let mut lit = off.repeat(8);
     lit[..4].copy_from_slice(&[0xFF, 0, 0, 0xFF]);
     lit[28..].copy_from_slice(&[0xEF, 3, 2, 1]);
     assert_eq!(frames[0], lit);
-    assert_eq!(frames[1], [0xE0u8, 0, 0, 0].repeat(8));
+    lit[..4].copy_from_slice(&off);
+    assert_eq!(frames[1], lit, "clear(0)");
+    assert_eq!(frames[2], [0xFFu8, 0xFF, 0, 0].repeat(8), "set_all");
+    assert_eq!(frames[3], off.repeat(8), "clear_all");
 }
 
 #[test]
@@ -135,7 +151,7 @@ fn joystick_reads_centred_axes() {
 }
 
 #[test]
-fn opto_relay_switches_and_reads_back() {
+fn opto_relay_switches_and_reads_the_pin() {
     let mut relay = OptoRelay::new(bus(0x28, &[1, 0, 0], 3));
     relay.on().unwrap();
     relay.off().unwrap();
@@ -150,8 +166,18 @@ fn latch_relay_answers_at_its_factory_address() {
     assert_eq!(relay.address().get(), 0x02);
     assert_eq!(relay.address(), Kind::LatchRelay.default_address());
     relay.verify().unwrap();
-    relay.on().unwrap();
+    let mut delay = FakeDelay::default();
+    relay.on(&mut delay).unwrap();
+    relay.off(&mut delay).unwrap();
     assert_eq!(relay.state().unwrap(), Some(true));
     let bus = relay.release();
-    assert_eq!(bus.node(0x02).frames, vec![vec![1, 0, 0]]);
+    assert_eq!(bus.node(0x02).frames, vec![vec![1, 0, 0], vec![0, 0, 0]]);
+}
+
+#[test]
+fn latch_relay_waits_out_the_coil_pulse() {
+    let mut relay = LatchRelay::new(bus(0x04, &[0, 0, 0], 3));
+    let mut delay = FakeDelay::default();
+    relay.on(&mut delay).unwrap();
+    assert_eq!(delay.total_ns, SETTLE_MS as u64 * 1_000_000);
 }

@@ -27,6 +27,10 @@ args = { x = 140, y = 120, pressed = false, deadzone = 26 }
 expect = { x = 0, y = 0, pressed = false }
 
 [[to_state]]
+args = { x = 160, y = 120, pressed = false, deadzone = 26 }
+expect = { x = -32, y = 8, pressed = false }
+
+[[to_state]]
 args = { x = 160, y = 128, pressed = false, deadzone = 26 }
 expect = { x = -32, y = 0, pressed = false }
 
