@@ -64,8 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HubPort` that implements `I2c`: each transaction selects the port,
   runs the operations and deselects, even when they fail, so any device
   works behind a hub unchanged. A `HubPort` can carry a further hub.
+  `Hub::new(i2c)` becomes `Hub::new(&RefCell)`, and
+  `Hub::new_with_address(i2c, u8)` becomes
+  `Hub::with_address(&RefCell, Address) -> Option<Hub>` (0x70-0x77).
   `Hub::select`/`clear`/`release`, `HubPort::new(&mut Hub, port)` and
-  `addresses::HUB` are gone. Single execution context only for now.
+  `addresses::HUB` are gone; `Hub::deselect` disconnects every port
+  after a failed deselect. Single execution context only for now.
 
 ### Added
 

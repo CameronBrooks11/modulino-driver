@@ -194,7 +194,8 @@ impl FakeHub {
 /// One addressable thing a transaction reached.
 enum Target<'a> {
     Node(&'a mut FakeNode),
-    Hub(&'a mut FakeHub),
+    /// A hub's control byte and its write log.
+    Hub(&'a mut u8, &'a mut Vec<u8>),
 }
 
 /// One bus transaction or delay, in the order they happened.
@@ -267,13 +268,18 @@ impl FakeBus {
         }
         for hub in self.hubs.iter_mut() {
             let (hub_addr, control) = (hub.addr, hub.control);
+            // The hub answers its own address while its connected ports
+            // carry the same transaction: the segments are joined.
+            let FakeHub {
+                ports,
+                control: ctrl,
+                writes,
+                ..
+            } = hub;
             if addr != 0 && hub_addr == addr {
-                // A hub answering here cannot also route the same
-                // transaction downstream in this model.
-                out.push(Target::Hub(hub));
-                continue;
+                out.push(Target::Hub(ctrl, writes));
             }
-            for (i, port) in hub.ports.iter_mut().enumerate() {
+            for (i, port) in ports.iter_mut().enumerate() {
                 if control >> i & 1 == 1 {
                     port.targets(addr, out);
                 }
@@ -305,10 +311,10 @@ impl I2c for FakeBus {
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => n.write(data),
-                            Target::Hub(h) => {
+                            Target::Hub(control, writes) => {
                                 if let Some(&last) = data.last() {
-                                    h.control = last;
-                                    h.writes.push(last);
+                                    **control = last;
+                                    writes.push(last);
                                 }
                             }
                         }
@@ -322,7 +328,7 @@ impl I2c for FakeBus {
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => n.read(&mut mine),
-                            Target::Hub(h) => mine.fill(h.control),
+                            Target::Hub(control, _) => mine.fill(**control),
                         }
                         buf.iter_mut().zip(&mine).for_each(|(b, m)| *b &= m);
                     }

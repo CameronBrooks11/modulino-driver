@@ -14,6 +14,17 @@
 //! interrupts needs a lock and is not supported yet. Devices on the upstream
 //! bus itself can share the same `RefCell`, for example through
 //! `embedded_hal_bus::i2c::RefCellDevice`.
+//!
+//! Two consequences of the hardware to keep in mind:
+//!
+//! - The hub stays addressable while a port is connected, so a transaction
+//!   through a port to the hub's own address (or to any hub above it)
+//!   reaches that hub. Do not put a device or a nested hub at the address of
+//!   a hub above it.
+//! - If the deselect fails after the operations succeeded, the operations
+//!   took effect but the error is returned, and the port stays connected
+//!   until the next transaction through this hub or a call to
+//!   [`Hub::deselect`]. Retrying repeats a write that already happened.
 
 use core::cell::RefCell;
 
@@ -22,11 +33,11 @@ use embedded_hal::i2c::{ErrorType, I2c, Operation};
 use crate::addr::Address;
 
 /// The lowest hub address (A0-A2 low).
-pub const HUB_MIN_ADDRESS: u8 = 0x70;
+pub(crate) const HUB_MIN_ADDRESS: u8 = 0x70;
 /// The highest hub address (A0-A2 high).
-pub const HUB_MAX_ADDRESS: u8 = 0x77;
+pub(crate) const HUB_MAX_ADDRESS: u8 = 0x77;
 /// Ports per hub.
-pub const PORTS: u8 = 8;
+pub(crate) const PORTS: u8 = 8;
 
 /// A Modulino Hub on a shared bus.
 ///
@@ -74,6 +85,13 @@ impl<'a, B: I2c> Hub<'a, B> {
     /// The hub's address.
     pub fn address(&self) -> Address {
         self.addr
+    }
+
+    /// Disconnect every port: write 0 to the control byte. Each
+    /// [`HubPort`] transaction already ends this way; this is for recovering
+    /// after a failed deselect.
+    pub fn deselect(&self) -> Result<(), B::Error> {
+        self.bus.borrow_mut().write(self.addr.get(), &[0])
     }
 
     /// Port `port` (0-7) as a bus. Does no I/O.
@@ -129,7 +147,12 @@ impl<B: I2c> I2c for HubPort<'_, B> {
     ) -> Result<(), Self::Error> {
         let mut bus = self.hub.bus.borrow_mut();
         let hub = self.hub.addr.get();
-        bus.write(hub, &[self.mask])?;
+        if let Err(e) = bus.write(hub, &[self.mask]) {
+            // The hub may have latched the byte before the error; disconnect
+            // on a best-effort basis and report the select error.
+            let _ = bus.write(hub, &[0]);
+            return Err(e);
+        }
         let result = bus.transaction(address, operations);
         let deselect = bus.write(hub, &[0]);
         result.and(deselect)

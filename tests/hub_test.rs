@@ -7,7 +7,7 @@ use core::cell::RefCell;
 use embedded_hal::i2c::I2c;
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction};
 use modulino_driver::{Address, Buttons, Error, Hub, Knob, LatchRelay, LedMatrix, MatrixMode};
-use support::{FakeBus, FakeDelay, FakeHub, FakeNode, Nack};
+use support::{Event, FakeBus, FakeDelay, FakeHub, FakeNode, Log, Nack};
 
 const HUB: u8 = 0x70;
 const BUTTONS: u8 = 0x3E;
@@ -95,11 +95,19 @@ fn port_deselects_after_a_failed_operation() {
 
 #[test]
 fn missing_hub_fails_before_the_device_is_addressed() {
-    let bus = RefCell::new(FakeBus::new(vec![buttons_board([0; 3])]));
+    let log = Log::default();
+    let bus = RefCell::new(FakeBus {
+        log: Some(log.clone()),
+        ..FakeBus::new(vec![buttons_board([0; 3])])
+    });
     let hub = Hub::new(&bus);
     let mut buttons = Buttons::new(hub.port(0).unwrap());
     assert_eq!(buttons.read(), Err(Error::I2c(Nack(HUB))));
-    assert_eq!(bus.into_inner().transactions, 1, "only the select");
+    assert_eq!(
+        *log.borrow(),
+        [Event::Bus(HUB), Event::Bus(HUB)],
+        "select, best-effort deselect; the board is never addressed"
+    );
 }
 
 #[test]
@@ -143,4 +151,82 @@ fn port_works_as_a_plain_bus() {
     let mut buf = [0u8; 4];
     port.read(BUTTONS, &mut buf).unwrap();
     assert_eq!(buf, [0x7C, 1, 1, 1]);
+}
+
+/// A bus that fails the next write of `[0]` to `hub`, as a hub that drops
+/// off the bus mid-transaction would.
+struct FailDeselect {
+    bus: FakeBus,
+    hub: u8,
+    armed: bool,
+}
+
+impl embedded_hal::i2c::ErrorType for FailDeselect {
+    type Error = Nack;
+}
+
+impl I2c for FailDeselect {
+    fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal::i2c::Operation<'_>],
+    ) -> Result<(), Nack> {
+        let deselect = matches!(operations, [embedded_hal::i2c::Operation::Write(&[0])]);
+        if self.armed && address == self.hub && deselect {
+            self.armed = false;
+            return Err(Nack(0xEE));
+        }
+        self.bus.transaction(address, operations)
+    }
+}
+
+fn failing_deselect(port_nodes: Vec<FakeNode>) -> RefCell<FailDeselect> {
+    let hub = FakeHub::new(HUB).with_nodes(1, port_nodes);
+    RefCell::new(FailDeselect {
+        bus: FakeBus::with_hubs(vec![hub]),
+        hub: HUB,
+        armed: true,
+    })
+}
+
+#[test]
+fn operation_error_comes_before_deselect_error() {
+    // Nothing on port 1, and the deselect fails too.
+    let bus = failing_deselect(vec![]);
+    let hub = Hub::new(&bus);
+    let mut buttons = Buttons::new(hub.port(1).unwrap());
+    assert_eq!(buttons.read(), Err(Error::I2c(Nack(BUTTONS))));
+}
+
+#[test]
+fn failed_deselect_is_reported_and_recoverable() {
+    let bus = failing_deselect(vec![buttons_board([0; 3])]);
+    let hub = Hub::new(&bus);
+    let mut buttons = Buttons::new(hub.port(1).unwrap());
+    // The write took effect, but the deselect error is reported.
+    assert_eq!(
+        buttons.set_leds(true, false, false),
+        Err(Error::I2c(Nack(0xEE)))
+    );
+    assert_eq!(bus.borrow().bus.node(BUTTONS).frames, vec![vec![1, 0, 0]]);
+    assert_eq!(
+        bus.borrow().bus.hub(HUB).control,
+        0x02,
+        "port left connected"
+    );
+
+    hub.deselect().unwrap();
+    assert_eq!(bus.borrow().bus.hub(HUB).control, 0);
+}
+
+#[test]
+fn hub_address_behind_its_own_port_is_a_collision() {
+    // A board readdressed to 0x70 behind port 0 shares the joined segment
+    // with the hub itself, so both answer a read.
+    let hub = FakeHub::new(HUB).with_nodes(0, vec![FakeNode::new(0x7C, &[0; 3], 3).at(HUB)]);
+    let bus = RefCell::new(FakeBus::with_hubs(vec![hub]));
+    let mut port = Hub::new(&bus).port(0).unwrap();
+    let mut byte = [0u8; 1];
+    port.read(HUB, &mut byte).unwrap();
+    assert_eq!(byte, [0x01 & 0x7C], "wired-AND of the hub and the board");
 }
