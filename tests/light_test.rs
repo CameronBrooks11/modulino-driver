@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::Light;
+use modulino_driver::Light;
 
 #[test]
 fn test_light_init_and_read() {

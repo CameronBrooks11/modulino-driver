@@ -16,7 +16,7 @@ To run these examples, you'll need to:
 
 ```rust
 use embassy_rp::i2c::{I2c, Config};
-use modulino::{Pixels, Color};
+use modulino_driver::{Pixels, Color};
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -34,7 +34,7 @@ async fn main(_spawner: Spawner) {
 
 ```rust
 use esp_hal::{i2c::I2C, prelude::*};
-use modulino::{Buzzer, Note};
+use modulino_driver::{Buzzer, Note};
 
 #[entry]
 fn main() -> ! {
@@ -62,7 +62,7 @@ fn main() -> ! {
 
 ```rust
 use stm32f4xx_hal::{i2c::I2c, prelude::*};
-use modulino::{Buttons, ButtonState};
+use modulino_driver::{Buttons, ButtonState};
 
 #[entry]
 fn main() -> ! {

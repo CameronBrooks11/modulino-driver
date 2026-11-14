@@ -107,7 +107,7 @@ impl From<Note> for u16 {
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::{Buzzer, Note};
+/// use modulino_driver::{Buzzer, Note};
 ///
 /// let mut buzzer = Buzzer::new(i2c)?;
 ///

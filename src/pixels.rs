@@ -13,7 +13,7 @@ pub const NUM_LEDS: usize = 8;
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::{Pixels, Color};
+/// use modulino_driver::{Pixels, Color};
 ///
 /// let mut pixels = Pixels::new(i2c)?;
 ///

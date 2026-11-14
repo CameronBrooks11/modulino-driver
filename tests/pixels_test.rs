@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::{Color, Pixels};
+use modulino_driver::{Color, Pixels};
 
 #[test]
 fn test_pixels_formatting() {

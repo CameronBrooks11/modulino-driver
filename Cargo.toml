@@ -1,12 +1,11 @@
 [package]
-name = "modulino"
-version = "0.3.0"
+name = "modulino-driver"
+version = "0.1.0-dev"
 edition = "2021"
 authors = ["Mariusz Jurgielewicz <mordor@mail.com>"]
-description = "A hardware-agnostic, no_std Rust driver for Arduino Modulino breakout boards"
+description = "A layered, hardware-agnostic no_std driver for Arduino Modulino boards"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/melastmohican/modulino-rs"
-documentation = "https://docs.rs/modulino"
+repository = "https://github.com/CameronBrooks11/modulino-driver"
 readme = "README.md"
 keywords = ["embedded", "i2c", "arduino", "modulino", "no_std"]
 categories = ["embedded", "no-std", "hardware-support"]

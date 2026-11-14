@@ -13,7 +13,7 @@ use embedded_hal::i2c::I2c;
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::LatchRelay;
+/// use modulino_driver::LatchRelay;
 ///
 /// let mut relay = LatchRelay::new(i2c)?;
 ///

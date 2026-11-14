@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::Pressure;
+use modulino_driver::Pressure;
 
 #[test]
 fn test_pressure_init_and_read() {

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the package to `modulino-driver` (library `modulino_driver`),
+  version 0.1.0-dev. The entries below are the history of modulino-rs,
+  which this crate started from at 0.3.0.
+
+## [0.3.0] - 2026-07-02
+
+Upstream released 0.3.0 without a changelog entry; this one is written
+from the release commit (87e091a).
+
+### Added
+- Driver for **Modulino Motors** (`Motors`), experimental.
+
+### Changed
+- Joystick axes inverted: `x` and `y` are now `128 - raw` (were `raw - 128`).
+- Hub docs no longer mark the driver experimental.
+
 ## [0.2.0] - 2026-05-24
 
 ### Added
@@ -40,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `defmt` feature for embedded debugging support
 - Comprehensive documentation and examples
 
-[Unreleased]: https://github.com/melastmohican/modulino-rs/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/modulino-driver/commits/main
+[0.3.0]: https://github.com/melastmohican/modulino-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/melastmohican/modulino-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/melastmohican/modulino-rs/releases/tag/v0.1.0

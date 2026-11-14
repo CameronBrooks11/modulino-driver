@@ -8,7 +8,7 @@
 //! communicate with that device, then select the other port to communicate with the second device.
 
 use core::cell::RefCell;
-use modulino::{Buttons, Hub};
+use modulino_driver::{Buttons, Hub};
 
 /// A simple helper that implements `I2c` for a shared `RefCell` reference.
 ///

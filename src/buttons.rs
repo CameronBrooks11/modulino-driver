@@ -73,7 +73,7 @@ impl ButtonLed {
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::Buttons;
+/// use modulino_driver::Buttons;
 ///
 /// let mut buttons = Buttons::new(i2c)?;
 ///
