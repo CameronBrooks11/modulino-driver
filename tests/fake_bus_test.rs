@@ -33,6 +33,7 @@ fn long_write_is_cut_to_the_board_length() {
     let mut bus = buzzer_bus();
     bus.write(0x1E, &[9, 8, 7, 6, 5, 4, 3, 2, 1, 0]).unwrap();
     assert_eq!(bus.node(0x1E).frames, vec![vec![9, 8, 7, 6, 5, 4, 3, 2]]);
+    assert_eq!(bus.node(0x1E).long, 1, "counted as a long write");
 }
 
 #[test]

@@ -33,7 +33,7 @@ fn short_write_is_refused_before_the_bus() {
     );
     let bus = node.release();
     let board = bus.node(BUZZER_ADDR);
-    assert_eq!((board.frames.len(), board.dropped), (0, 0));
+    assert_eq!((board.frames.len(), board.dropped, board.long), (0, 0, 0));
 }
 
 #[test]

@@ -39,6 +39,10 @@ pub struct FakeNode {
     pub frames: Vec<Vec<u8>>,
     /// Writes the board dropped for their length.
     pub dropped: usize,
+    /// Writes longer than the board's length. The board processes their
+    /// first bytes; what the bus does with the rest is unverified, so a
+    /// driver must never send one.
+    pub long: usize,
     /// Set by a `CF` command.
     pub address_changes: usize,
     /// `Some(grayscale)` for an LED matrix, whose write length and read
@@ -71,6 +75,7 @@ impl FakeNode {
             write_len,
             frames: Vec::new(),
             dropped: 0,
+            long: 0,
             address_changes: 0,
             matrix_grayscale: None,
         }
@@ -98,6 +103,9 @@ impl FakeNode {
         if data.len() < self.write_len {
             self.dropped += 1;
             return;
+        }
+        if data.len() > self.write_len {
+            self.long += 1;
         }
         let data = &data[..self.write_len];
         if data.starts_with(b"DIE") {

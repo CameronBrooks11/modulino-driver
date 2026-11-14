@@ -71,7 +71,7 @@ fn vibro_off_sends_the_full_frame() {
     assert_eq!(board.frames[0][8], PowerLevel::Intense as u8, "duty byte");
     // The motor stops only if the board processed the off frame.
     assert_eq!(board.frames.last(), Some(&vec![0u8; 12]));
-    assert_eq!((board.frames.len(), board.dropped), (2, 0));
+    assert_eq!((board.frames.len(), board.dropped, board.long), (2, 0, 0));
 }
 
 #[test]
@@ -99,7 +99,11 @@ fn knob_offset_lives_on_the_host() {
     );
     let bus = knob.release();
     let board = bus.node(0x3A);
-    assert_eq!((board.frames.len(), board.dropped), (0, 0), "no writes");
+    assert_eq!(
+        (board.frames.len(), board.dropped, board.long),
+        (0, 0, 0),
+        "no writes"
+    );
 }
 
 #[test]

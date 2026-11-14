@@ -53,8 +53,9 @@ fn matrix_mode_switch_changes_the_frame_length() {
     mono[0] = 0x01;
     assert_eq!(board.frames, vec![mono, gray], "pictures shown");
     assert_eq!(
-        board.dropped, 0,
-        "mode commands were padded to the current length"
+        (board.dropped, board.long),
+        (0, 0),
+        "mode commands were padded to exactly the current length"
     );
     assert_eq!(board.matrix_grayscale, Some(false));
 }
@@ -63,8 +64,8 @@ fn matrix_mode_switch_changes_the_frame_length() {
 fn matrix_mode_commands_are_padded_to_the_current_length() {
     // From grayscale, a command padded to the mono length (12) is short of
     // the 48 the board expects, so the board drops it and stays grayscale.
-    // (The other direction cannot tell: a long write has its first bytes
-    // processed.)
+    // The other direction, a long write, is counted in
+    // `matrix_mode_switch_changes_the_frame_length`.
     let mut matrix = matrix_on_bus(true);
     matrix.set_mode(MatrixMode::Mono).unwrap();
     assert_eq!(matrix.release().node(MATRIX).matrix_grayscale, Some(false));
