@@ -148,7 +148,7 @@ src/
 spec/
   nodes.toml       node kinds: strap, addresses, lengths, source lines
   chips.toml       chip kinds: addresses, ID register and value
-  vectors/*.json   codec test vectors
+  vectors/*.toml   codec test vectors
 tests/
   support/         FakeNode, FakeHub, FakeChip bus simulator
 ```
@@ -206,10 +206,13 @@ impl<I2C: I2c> Node<I2C> {
   with `WrongIdentity { expected, got }` if byte 0 is not one of the kind's
   straps. The byte arrives anyway, so the check costs nothing and catches a
   board swapped or readdressed under a running program.
+- **Reads stay inside the payload.** `P` may be shorter than the kind's
+  read payload, never longer: bytes past what the firmware sends are not
+  data. A longer `P` is `Error::FrameLength`.
 - **Writes are exact.** `W` must equal the kind's write length from
-  `spec.rs`; for the LED matrix, which has two lengths, the device checks its
-  tracked mode at runtime. A mismatch is `Error::FrameLength`, never a short
-  frame on the wire.
+  `spec.rs`. The LED matrix has two lengths; the node accepts either and the
+  device checks its tracked mode. A mismatch is `Error::FrameLength`, never a
+  short frame on the wire.
 - **Prefix guard.** A frame starting `C F` or `D I E` is refused with
   `Error::ReservedPrefix`. Only `service.rs` can send those, through a
   crate-private function. This changes behaviour on inputs other libraries
@@ -314,9 +317,10 @@ Each address in `0x01..=0x77` is probed with a 1-byte read, not a
 zero-length write, because some HALs (RP2040's I2C block is the known case)
 refuse zero-length writes. Addresses that answer are classified by evidence:
 
-1. **0x70-0x77**: hub check first. Write a port mask, read it back, restore
-   0. A 1-byte write to a node is shorter than any node frame, so a node
-   drops it.
+1. **0x70-0x77**: hub check first. Write an odd port mask, read it back,
+   restore 0. A 1-byte write to a node is shorter than any node frame, so a
+   node drops it, and a node's read-back is its strap byte, which is always
+   even, so it can never echo the mask.
 2. **A chip's datasheet address**: ID register check.
 3. **Anywhere**: strap byte from the probe read maps to a node kind.
 4. Otherwise `Unknown`. Never a guess from the address table.
@@ -358,7 +362,10 @@ pub enum Error<E> {
 ```
 
 `InvalidParameter` and `DataError` from 0.3 fold into `OutOfRange` and
-`WrongIdentity`. A `defmt` feature derives `defmt::Format`, as today.
+`WrongIdentity`, and `DeviceNotFound` becomes `NotFound`. While M2-M6 move
+the remaining drivers over, the 0.3 variants stay beside the new ones and
+are removed with their last user. A `defmt` feature derives
+`defmt::Format`, as today.
 
 ## 5. Decisions
 
@@ -394,9 +401,10 @@ restructure.
   value came from. A `revision` field exists from the start, so a new frame
   variant (Buttons going from 3 to 4 bytes in firmware PR #28) is a new row,
   not a new concept.
-- `spec/vectors/<kind>.json` holds codec test vectors as language-neutral
+- `spec/vectors/<kind>.toml` holds codec test vectors as language-neutral
   data: an operation, its arguments or input bytes, and the expected bytes,
-  values or error.
+  values or error. TOML rather than JSON, so one parser reads all of
+  `spec/` and byte strings can be written in hex.
 - `src/spec.rs` is written by hand and is the only place in Rust those
   constants appear. A test parses `spec/*.toml` (std, dev-dependency only)
   and fails on any disagreement with `spec.rs`.
@@ -468,7 +476,7 @@ Each one leaves `main` green and usable. Tracked as sub-issues of one epic.
 | # | Milestone | Ships |
 |---|---|---|
 | M0 | Rebrand and gate | Crate renamed, README with attribution and corrected module table (the LED matrix is STM32-driven, not IS31FL3733), justfile, AGENTS.md, CI kept green |
-| M1 | Buttons end to end on the new core | `spec/nodes.toml`, `src/spec.rs` and its conformance test; `addr.rs`; `node.rs` with identity check, exact length and prefix guard; new `Error`; `FakeNode`; Buttons rebuilt on them with codec and JSON vectors, proving every layer once |
+| M1 | Buttons end to end on the new core | `spec/nodes.toml`, `src/spec.rs` and its conformance test; `addr.rs`; `node.rs` with identity check, exact length and prefix guard; new `Error`; `FakeNode`; Buttons rebuilt on them with codec and vectors, proving every layer once |
 | M2 | Remaining node devices | Buzzer, Vibro, Knob, Pixels, Joystick, Opto relay, Latch relay on `Node`, with codecs and vectors; per-driver `discover()` deleted; Vibro off fixed |
 | M3 | LED matrix and Motors | Mode-tracked matrix (12/48), Motors commands and status, vectors |
 | M4 | Hub routing | `HubPort` as `I2c`, nested ports, deselect on error, `FakeHub` |
