@@ -97,10 +97,10 @@ port n.
 |---|---|---|
 | Vibro `off()` sends 8 bytes, firmware needs 12, frame is dropped | `Modulino.h:369-373`, `vibro.rs:170-172` | Exact-length frames (4.3) |
 | A data write starting `CF`/`DIE` reprograms or bootloads the board (Knob set 17987, Buzzer 17987 Hz, matrix frames) | `main.c:235-254` | Prefix guard (4.3) |
-| AddressChanger pads CF to 40 bytes; a grayscale matrix needs 48 | `AddressChanger.ino:119` | Service pads to current length (4.7) |
+| AddressChanger pads CF to 40 bytes; a grayscale matrix needs 48 | `AddressChanger.ino:119` | Service pads to current length (4.8) |
 | Hub select forgotten or not cleared on error | `Modulino.h:134-153`, `examples/multiplexer.rs:66-79` | Hub port is a bus (4.2) |
-| Discovery trusts an ACK, or a colliding address table | `Modulino.h:180-194`, `device_manager.py:85-86` | Identity by evidence (4.6) |
-| Write errors swallowed, failed reads update cached state | `Modulino.h:164-172, 223-231` | One `Result` contract (4.8) |
+| Discovery trusts an ACK, or a colliding address table | `Modulino.h:180-194`, `device_manager.py:85-86` | Identity by evidence (4.7) |
+| Write errors swallowed, failed reads update cached state | `Modulino.h:164-172, 223-231` | One `Result` contract (4.6, 4.9) |
 | Per-driver copies of framing and discovery | `buttons.rs:118-163` and 14 others | Node layer (4.3) |
 | Wait loops that exit silently | `distance.rs:75-86, 97-107` | Bounded waits return `Timeout` (4.5) |
 | 7-bit and 8-bit addresses mixed in one field | `modulino.py:189-195`, `lib.rs:96-174` | `Address` and `Strap` types (4.1) |
