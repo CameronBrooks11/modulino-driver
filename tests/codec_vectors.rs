@@ -272,10 +272,8 @@ fn led_matrix_vectors() {
         // The variant fixes the length: a frame sized for the wrong mode
         // fails to convert.
         match led_matrix::encode_mode_command(current, target) {
-            led_matrix::ModeCommand::Mono(f) => assert_eq!(f, bytes(&case["expect"]), "{case:?}"),
-            led_matrix::ModeCommand::Grayscale(f) => {
-                assert_eq!(f, bytes(&case["expect"]), "{case:?}")
-            }
+            led_matrix::ModeCommand::Mono(f) => check_encode(case, Ok(f)),
+            led_matrix::ModeCommand::Grayscale(f) => check_encode(case, Ok(f)),
         }
     }
     for case in cases(&doc, "encode_mono") {

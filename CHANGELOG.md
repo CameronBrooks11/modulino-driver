@@ -53,8 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     to the current mode's length.
     `codec::led_matrix::encode_mode_command(current, target)` takes the
     board's current mode and returns a `ModeCommand` of that mode's
-    length, so a codec caller cannot build a mode command of a length the
-    board refuses.
+    length. A codec caller can no longer build a mode command of a length
+    no mode accepts; passing the board's real current mode is still the
+    caller's job (`set_mode` reads it from the board).
   - `Motors` sends one frame per firmware command: `set_mode`,
     `set_speeds` (raw -32767..32767), `stop`, `set_dc_frequency`
     (200-60 000 Hz), `step` (period at least 1 tick, as 0.3 required),
