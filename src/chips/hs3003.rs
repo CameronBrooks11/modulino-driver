@@ -60,12 +60,14 @@ pub(crate) fn measure<I: I2c>(
     bus.write(addr.get(), &[0x00]).map_err(Error::I2c)?;
     delay.delay_ms(CONVERSION_MS);
     let mut b = [0u8; 4];
-    for _ in 0..FETCHES {
+    for fetch in 0..FETCHES {
+        if fetch > 0 {
+            delay.delay_ms(RETRY_MS);
+        }
         bus.read(addr.get(), &mut b).map_err(Error::I2c)?;
         if let Some(reading) = decode(&b) {
             return Ok(reading);
         }
-        delay.delay_ms(RETRY_MS);
     }
     Err(Error::Timeout)
 }

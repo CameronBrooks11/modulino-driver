@@ -51,11 +51,13 @@ pub(crate) fn measure<I: I2c>(
     bus.write(addr.get(), &MEASURE).map_err(Error::I2c)?;
     delay.delay_ms(MEASURE_MS);
     let mut b = [0u8; 6];
-    for _ in 0..READS {
+    for read in 0..READS {
+        if read > 0 {
+            delay.delay_ms(RETRY_MS);
+        }
         if acked(bus.read(addr.get(), &mut b))? {
             return decode(&b).ok_or(Error::DataError);
         }
-        delay.delay_ms(RETRY_MS);
     }
     Err(Error::Timeout)
 }

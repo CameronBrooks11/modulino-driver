@@ -311,8 +311,11 @@ let bus = buttons.release();
     prefix hazard.
   - LED matrix tracks its mode, read from the board on `verify()` and updated
     on every mode change.
-- Chip modules use the same shape. Variant modules are enums chosen by ID:
-  `Thermo` is `Hs3003 | Sht31`, `Distance` is `Vl53l4cd | Vl53l4ed`.
+- Chip modules use the same shape. A module with variants finds its chip
+  in `verify()` and keeps which one it found: `Thermo` takes an HS3003
+  that acknowledges at 0x44 (it has no identity, as in Arduino's library)
+  or else an SHT31 proven by its status CRC at 0x45; `Distance` chooses
+  between `Vl53l4cd` and `Vl53l4ed` by model ID.
 
 ### 4.7 Scan (`scan.rs`)
 
@@ -391,8 +394,8 @@ pub enum Error<E> {
 identity check, with the identity byte where the check reads one.
 `InvalidParameter` from 0.3 folds into `OutOfRange`, and `DeviceNotFound`
 becomes `NotFound`. `DataError` stays, narrowed to a reply the protocol
-does not define (the LED matrix reports its mode as `MON` or `GS4`; anything
-else is `DataError`). While M2-M6 move
+does not define or a corrupted one: an LED matrix mode other than `MON` or
+`GS4`, or an SHT31 measurement whose CRC fails. While M2-M6 move
 the remaining drivers over, the 0.3 variants stay beside the new ones and
 are removed with their last user. A `defmt` feature derives
 `defmt::Format`, as today.

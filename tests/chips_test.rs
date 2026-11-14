@@ -307,10 +307,8 @@ mod thermo {
         let mut delay = FakeDelay::default();
         let r = thermo.read(&mut delay).unwrap();
         assert!((r.temperature - 25.0).abs() < 0.01);
-        assert_eq!(
-            delay.total_ns,
-            u64::from(hs3003::CONVERSION_MS + hs3003::RETRY_MS) * 1_000_000
-        );
+        // 40 ms conversion, 5 ms before the second fetch.
+        assert_eq!(delay.total_ns, 45 * 1_000_000);
         thermo.release().done();
     }
 
@@ -322,8 +320,9 @@ mod thermo {
         let mut thermo = Thermo::new(I2cMock::new(&expectations));
         let mut delay = FakeDelay::default();
         assert_eq!(thermo.read(&mut delay), Err(Error::Timeout));
-        let waited = hs3003::CONVERSION_MS + hs3003::RETRY_MS * hs3003::FETCHES as u32;
-        assert_eq!(delay.total_ns, u64::from(waited) * 1_000_000);
+        // 40 ms conversion, then 5 ms before each fetch after the first.
+        let waited = 40 + 5 * (hs3003::FETCHES as u64 - 1);
+        assert_eq!(delay.total_ns, waited * 1_000_000);
         thermo.release().done();
     }
 
@@ -344,10 +343,8 @@ mod thermo {
         assert_eq!(thermo.address().map(|a| a.get()), Some(0x45));
         assert!((r.temperature - 25.0).abs() < 0.01, "{r:?}");
         assert!((r.humidity - 50.0).abs() < 0.01, "{r:?}");
-        assert_eq!(
-            delay.total_ns,
-            u64::from(sht31::MEASURE_MS + sht31::RETRY_MS) * 1_000_000
-        );
+        // 15 ms measurement, 1 ms before the second read.
+        assert_eq!(delay.total_ns, 16 * 1_000_000);
         thermo.release().done();
     }
 
@@ -368,6 +365,17 @@ mod thermo {
             thermo.read(&mut FakeDelay::default()),
             Err(Error::DataError)
         );
+        thermo.release().done();
+    }
+
+    #[test]
+    fn a_bus_fault_at_0x44_outranks_the_sht31_nack() {
+        let expectations = [
+            T::read(0x44, vec![0x00]).with_error(ErrorKind::Bus),
+            T::write(0x45, vec![0xF3, 0x2D]).with_error(NACK),
+        ];
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        assert_eq!(thermo.verify(), Err(Error::I2c(ErrorKind::Bus)));
         thermo.release().done();
     }
 

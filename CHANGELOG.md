@@ -74,7 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the chip.
 - `Thermo` finds its sensor: an HS3003 at 0x44 or, on some boards, an
   SHT31 at 0x45 (`verify()` returns which, `chip()` reports it).
-  `read(&mut delay)` returns `ThermoReading` (was `ThermoMeasurement`).
+  `read(&mut delay)` returns `ThermoReading` (was `ThermoMeasurement`;
+  it no longer derives `Default` or converts from `hs3003::Measurement`),
+  and `address()` returns `Option<Address>`, `None` until the sensor is
+  found (was `u8`).
   The HS3003 path refuses a stale sample (status 01) and retries,
   ending in `Error::Timeout`; the SHT31 path retries while the sensor
   NACKs and returns `Error::DataError` on a bad CRC. The `hs3003`
