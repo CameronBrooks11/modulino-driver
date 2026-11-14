@@ -347,7 +347,12 @@ refuse zero-length writes. Addresses that answer are classified by evidence:
    `spec/chips.toml` (an ID register, or the SHT31's status CRC). The HS3003
    has no readable identity and its first data byte can equal a strap byte,
    so anything at 0x44 is `Unknown`. The SHT3x NACKs reads with no data
-   pending, so at 0x45 a NACKed probe still runs the status check.
+   pending, so at 0x45 a NACKed probe still runs the status check. A node
+   moved to 0x45 drops the 2-byte status command and answers with its strap
+   byte and payload, which pass the status CRC by chance (a Knob at 1 in 256
+   counts). So the check first makes a bare read: a node strap there that
+   the status reply repeats is a node. The strap byte alone does not decide,
+   because an SHT3x status can start with 0x04 or 0x28, two strap values.
 3. **Anywhere**: strap byte from the probe read maps to a node kind.
 4. Otherwise `Unknown`. Never a guess from the address table.
 

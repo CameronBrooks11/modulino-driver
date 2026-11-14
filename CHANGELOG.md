@@ -142,6 +142,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A node moved to 0x45 is no longer taken for an SHT31. It drops the
+  status command and answers with its strap byte and payload, which pass
+  the status CRC by chance: a Knob at 1 in 256 encoder counts (144 and 420
+  among them). `scan` reported it as `Chip(Sht31)` and `Thermo::verify`
+  accepted it. The SHT3x check now reads once before the command and
+  rejects a reply that repeats a node strap byte read there.
 - `Vibro::off` sends the full 12-byte frame. 0.3 sent 8 bytes, which the
   firmware drops (main.c:548-549), so the motor ran on until its
   commanded duration ended. Read from the firmware source; not yet

@@ -40,6 +40,9 @@
 //!   (including a node moved there).
 //! - Any other device whose first byte equals a strap byte reads as that
 //!   node.
+//! - An SHT31 that answered a bare read with a node strap byte and then
+//!   reported that same byte as its status would be taken for a node. A
+//!   node moved to 0x45 does exactly that, which is how it is told apart.
 //! - Behind a hub port, the hub itself and any hub above it stay
 //!   addressable. Through port `n` a hub reads back `1 << n`, which can be
 //!   mistaken for a node (port 2 reads 0x04, the latch relay strap), so pass

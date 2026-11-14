@@ -330,6 +330,8 @@ mod thermo {
     fn falls_back_to_sht31_and_retries_a_busy_read() {
         let expectations = [
             T::read(0x44, vec![0x00]).with_error(NACK),
+            // An idle SHT3x NACKs a bare read.
+            T::read(0x45, vec![0x00]).with_error(NACK),
             T::write(0x45, vec![0xF3, 0x2D]),
             T::read(0x45, sht_status()),
             T::write(0x45, vec![0x24, 0x00]),
@@ -355,6 +357,8 @@ mod thermo {
         assert_eq!(sht31::decode(&bad.clone().try_into().unwrap()), None);
         let expectations = [
             T::read(0x44, vec![0x00]).with_error(NACK),
+            // An idle SHT3x NACKs a bare read.
+            T::read(0x45, vec![0x00]).with_error(NACK),
             T::write(0x45, vec![0xF3, 0x2D]),
             T::read(0x45, sht_status()),
             T::write(0x45, vec![0x24, 0x00]),
@@ -372,11 +376,28 @@ mod thermo {
     fn a_bus_fault_at_0x44_outranks_the_sht31_nack() {
         let expectations = [
             T::read(0x44, vec![0x00]).with_error(ErrorKind::Bus),
+            // An idle SHT3x NACKs a bare read.
+            T::read(0x45, vec![0x00]).with_error(NACK),
             T::write(0x45, vec![0xF3, 0x2D]).with_error(NACK),
         ];
         let mut thermo = Thermo::new(I2cMock::new(&expectations));
         assert_eq!(thermo.verify(), Err(Error::I2c(ErrorKind::Bus)));
         thermo.release().done();
+    }
+
+    #[test]
+    fn a_knob_at_0x45_is_not_taken_for_an_sht31() {
+        // Count 144 makes the knob's reply pass the SHT3x status CRC.
+        let knob = support::FakeNode::new(0x74, &[0x90, 0x00, 0x00], 4).at(0x45);
+        let mut thermo = Thermo::new(FakeBus::new(vec![knob]));
+        assert_eq!(
+            thermo.verify(),
+            Err(Error::WrongChip {
+                expected: ChipKind::Sht31,
+                got: Some(0x74)
+            })
+        );
+        assert_eq!(thermo.chip(), None);
     }
 
     #[test]

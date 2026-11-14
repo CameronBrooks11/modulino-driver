@@ -400,28 +400,33 @@ fn nacked_hub_restore_is_an_error() {
 
 #[test]
 fn sht31_status_read_error_stops_the_scan() {
-    // 0x45: probe (NACKed, silent sensor), command, then the status read.
-    let bus = FakeBus {
-        chips: vec![sht31(0)],
-        ..Default::default()
-    };
-    let mut bus = FailNth::new(bus, 0x45, 3, embedded_hal::i2c::ErrorKind::Bus);
-    let mut out = [Found::Unknown(a(1)); 4];
-    assert_eq!(
-        scan(&mut bus, &mut out),
-        Err(modulino_driver::Error::I2c(
-            embedded_hal::i2c::ErrorKind::Bus
-        ))
-    );
+    // 0x45: probe (NACKed, silent sensor), bare read, command, then the
+    // status read. A bus error at any step of the check stops the scan.
+    for n in [2, 3, 4] {
+        let bus = FakeBus {
+            chips: vec![sht31(0)],
+            ..Default::default()
+        };
+        let mut bus = FailNth::new(bus, 0x45, n, embedded_hal::i2c::ErrorKind::Bus);
+        let mut out = [Found::Unknown(a(1)); 4];
+        assert_eq!(
+            scan(&mut bus, &mut out),
+            Err(modulino_driver::Error::I2c(
+                embedded_hal::i2c::ErrorKind::Bus
+            )),
+            "error on transaction {n} at 0x45"
+        );
+    }
 }
 
 #[test]
 fn an_empty_bus_costs_one_probe_per_address() {
     let mut bus = FakeBus::default();
     run(&mut bus);
-    // One probe per address, plus the SHT31 status command at 0x45, which
-    // runs after a NACKed probe and stops at its own NACK.
-    assert_eq!(bus.transactions, 0x77 + 1);
+    // One probe per address, plus the SHT31 check at 0x45, which runs after
+    // a NACKed probe: a bare read, then the status command, which stops at
+    // its own NACK.
+    assert_eq!(bus.transactions, 0x77 + 2);
 }
 
 #[test]
@@ -445,4 +450,67 @@ fn vl53l4ed_is_told_from_vl53l4cd_by_model_id() {
         run(&mut bus),
         vec![Found::Chip(a(0x29), ChipKind::Vl53l4ed)]
     );
+}
+
+/// A Knob moved to 0x45 at encoder count `count`.
+fn knob_at_0x45(count: i16) -> FakeNode {
+    let [lo, hi] = count.to_le_bytes();
+    FakeNode::new(0x74, &[lo, hi, 0x00], 4).at(0x45)
+}
+
+#[test]
+fn a_knob_at_the_sht31_address_is_a_knob_whatever_its_count() {
+    // Count 144 is 0x0090: crc8([0x74, 0x90]) is 0x00, the next byte, so
+    // the knob's reply passes the SHT3x status CRC.
+    assert_eq!(sensirion_crc8(&[0x74, 0x90]), 0x00);
+    for count in [0, 144, 420, -148] {
+        let mut bus = FakeBus::new(vec![knob_at_0x45(count)]);
+        assert_eq!(
+            run(&mut bus),
+            vec![Found::Node(a(0x45), Kind::Knob)],
+            "count {count}"
+        );
+    }
+}
+
+#[test]
+fn an_sht31_whose_status_starts_like_a_strap_is_still_found() {
+    // 0x04 (T tracking alert) and 0x28 (heater and RH alert) are possible
+    // status bytes and also the latch and opto relay straps. Found whether
+    // the sensor NACKs a bare read or answers it with something else.
+    for msb in [0x04, 0x28] {
+        for nack_idle in [true, false] {
+            let status = [msb, 0x00];
+            let mut chip = FakeChip::new(0x45, 1).command(
+                &[0xF3, 0x2D],
+                &[status[0], status[1], sensirion_crc8(&status)],
+            );
+            chip.nack_idle_reads = nack_idle;
+            let mut bus = FakeBus {
+                chips: vec![chip],
+                ..Default::default()
+            };
+            assert_eq!(
+                run(&mut bus),
+                vec![Found::Chip(a(0x45), ChipKind::Sht31)],
+                "status {msb:#04x}, nack_idle {nack_idle}"
+            );
+        }
+    }
+    // A bare read answered with a strap byte, then a status that does not
+    // repeat it: still an SHT31. (Scan's probe reads register 0, the check's
+    // bare read register 1.)
+    let status = [0x80, 0x10];
+    let chip = FakeChip::new(0x45, 1)
+        .reg(0x00, 0x04)
+        .reg(0x01, 0x04)
+        .command(
+            &[0xF3, 0x2D],
+            &[status[0], status[1], sensirion_crc8(&status)],
+        );
+    let mut bus = FakeBus {
+        chips: vec![chip],
+        ..Default::default()
+    };
+    assert_eq!(run(&mut bus), vec![Found::Chip(a(0x45), ChipKind::Sht31)]);
 }
