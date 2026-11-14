@@ -1,0 +1,66 @@
+# Modulino chip boards: off-the-shelf sensors at their datasheet addresses.
+#
+# Each chip lists the addresses the Modulino board can use and how to tell
+# it apart from anything else that answers there:
+#
+# - register8:  write the 8-bit register index, read one byte, and compare
+#               `(byte & mask) == value`.
+# - register16: the same with a 16-bit (big-endian) register index.
+# - sht3x_status: write the 16-bit command, read status MSB, LSB and a CRC-8
+#               (polynomial 0x31, initial 0xFF) over the two status bytes; a
+#               matching CRC identifies the chip.
+# - none:       the chip has no readable identity; scan reports Unknown.
+#
+# src/spec.rs mirrors this file and tests/spec_conformance.rs fails when
+# they disagree. `verified` is false where the identity is assumed rather
+# than taken from the cited sources; those wait for the bench.
+
+[[chip]]
+kind = "lsm6dsox"
+module = "movement"
+addresses = [0x6A, 0x6B]
+id = { method = "register8", register = 0x0F, value = 0x6C, mask = 0xFF }
+verified = true
+source = "ST LSM6DSOX datasheet WHO_AM_I (0Fh) = 6Ch; Arduino_Modulino Modulino.h:533; arduino-modulino-mpy movement.py:15"
+
+[[chip]]
+kind = "vl53l4"
+module = "distance"
+addresses = [0x29]
+id = { method = "register16", register = 0x010F, value = 0xEB, mask = 0xFF }
+# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows).
+# The VL53L4ED is assumed to report the same; the bench confirms it.
+verified = false
+source = "arduino-modulino-mpy lib/vl53l4cd.py:66, 90-92; Modulino.h:938-939"
+
+[[chip]]
+kind = "hs3003"
+module = "thermo"
+addresses = [0x44]
+id = { method = "none" }
+verified = true
+source = "Renesas HS300x datasheet: no identification register in measurement mode; Modulino.h:616-619"
+
+[[chip]]
+kind = "sht31"
+module = "thermo"
+addresses = [0x45]
+id = { method = "sht3x_status", command = 0xF32D }
+verified = true
+source = "Sensirion SHT3x-DIS datasheet: status register command F32Dh, CRC-8 0x31/0xFF, CRC(BEEFh) = 92h; Modulino.h:624"
+
+[[chip]]
+kind = "ltr381rgb"
+module = "light"
+addresses = [0x53]
+id = { method = "register8", register = 0x06, value = 0xC0, mask = 0xF0 }
+verified = true
+source = "Lite-On LTR-381RGB-01 datasheet PART_ID (06h): part number C in the high nibble; Modulino.h:769; modulino-rs 0.3 light.rs:247, 276"
+
+[[chip]]
+kind = "lps22hb"
+module = "pressure"
+addresses = [0x5C]
+id = { method = "register8", register = 0x0F, value = 0xB1, mask = 0xFF }
+verified = true
+source = "ST LPS22HB datasheet WHO_AM_I (0Fh) = B1h; modulino-rs 0.3 pressure.rs:29-36"

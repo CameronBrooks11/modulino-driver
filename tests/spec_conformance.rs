@@ -1,6 +1,6 @@
 //! src/spec.rs must say exactly what spec/nodes.toml says.
 
-use modulino_driver::spec::{WriteLen, NODES};
+use modulino_driver::spec::{ChipId, WriteLen, CHIPS, NODES};
 use toml::{Table, Value};
 
 fn load(path: &str) -> Table {
@@ -53,5 +53,47 @@ fn nodes_toml_matches_spec_rs() {
             spec.write_len,
             "{name}: write_len"
         );
+    }
+}
+
+fn chip_id(v: &Value) -> ChipId {
+    let t = v.as_table().expect("id is a table");
+    let u8_at = |k: &str| u8::try_from(int(&t[k])).expect("byte");
+    match t["method"].as_str().expect("method") {
+        "register8" => ChipId::Register8 {
+            register: u8_at("register"),
+            value: u8_at("value"),
+            mask: u8_at("mask"),
+        },
+        "register16" => ChipId::Register16 {
+            register: u16::try_from(int(&t["register"])).expect("u16"),
+            value: u8_at("value"),
+            mask: u8_at("mask"),
+        },
+        "sht3x_status" => ChipId::Sht3xStatus {
+            command: u16::try_from(int(&t["command"])).expect("u16"),
+        },
+        "none" => ChipId::None,
+        other => panic!("unknown id method {other:?}"),
+    }
+}
+
+#[test]
+fn chips_toml_matches_spec_rs() {
+    let doc = load("spec/chips.toml");
+    let rows = doc["chip"].as_array().expect("[[chip]] rows");
+    assert_eq!(rows.len(), CHIPS.len(), "number of chip kinds");
+
+    for (row, spec) in rows.iter().zip(CHIPS.iter()) {
+        let name = row["kind"].as_str().expect("kind");
+        assert_eq!(name, spec.name, "kind order");
+        let addresses: Vec<u8> = row["addresses"]
+            .as_array()
+            .expect("addresses")
+            .iter()
+            .map(|v| u8::try_from(int(v)).expect("address fits u8"))
+            .collect();
+        assert_eq!(addresses, spec.addresses, "{name}: addresses");
+        assert_eq!(chip_id(&row["id"]), spec.id, "{name}: id");
     }
 }

@@ -1,0 +1,249 @@
+//! Scan identifies by evidence, never by address alone.
+
+mod support;
+
+use core::cell::RefCell;
+
+use modulino_driver::spec::{sensirion_crc8, NODES};
+use modulino_driver::{scan, scan_except, Address, ChipKind, Found, Hub, Kind};
+use support::{FakeBus, FakeChip, FakeHub, FakeNode};
+
+fn a(raw: u8) -> Address {
+    Address::new(raw).unwrap()
+}
+
+fn run(bus: &mut FakeBus) -> Vec<Found> {
+    let mut out = [Found::Unknown(a(1)); 32];
+    let n = scan(bus, &mut out).unwrap();
+    assert!(n <= out.len());
+    out[..n].to_vec()
+}
+
+#[test]
+fn hub_and_vibro_are_told_apart() {
+    // The Vibro's strap byte is 0x70, the hub's address: a table that mixes
+    // 7-bit and 8-bit values confuses them (arduino-modulino-mpy).
+    let mut bus = FakeBus {
+        hubs: vec![FakeHub::new(0x70)],
+        ..FakeBus::new(vec![FakeNode::new(0x70, &[0; 3], 12)])
+    };
+    assert_eq!(
+        run(&mut bus),
+        vec![Found::Node(a(0x38), Kind::Vibro), Found::Hub(a(0x70))]
+    );
+    let hub = bus.hub(0x70);
+    assert_eq!(hub.control, 0, "restored");
+    assert_eq!(
+        hub.writes,
+        vec![0x01, 0x00],
+        "odd mask, then the probed byte"
+    );
+}
+
+#[test]
+fn latch_relay_at_its_factory_address() {
+    let mut bus = FakeBus::new(vec![FakeNode::new(0x04, &[0; 3], 3)]);
+    assert_eq!(run(&mut bus), vec![Found::Node(a(0x02), Kind::LatchRelay)]);
+}
+
+#[test]
+fn buttons_moved_to_the_distance_address_is_buttons() {
+    let mut bus = FakeBus::new(vec![FakeNode::new(0x7C, &[0; 3], 3).at(0x29)]);
+    assert_eq!(run(&mut bus), vec![Found::Node(a(0x29), Kind::Buttons)]);
+    assert!(
+        bus.node(0x29).frames.is_empty(),
+        "ID check writes are dropped"
+    );
+}
+
+#[test]
+fn unknown_device_is_unknown() {
+    let mut bus = FakeBus {
+        chips: vec![FakeChip::new(0x50, 1).reg(0, 0xFF)],
+        ..Default::default()
+    };
+    assert_eq!(run(&mut bus), vec![Found::Unknown(a(0x50))]);
+}
+
+#[test]
+fn pixels_at_0x6a_reads_as_movement() {
+    // Documented ambiguity: the Pixels strap byte equals the LSM6DSOX
+    // WHO_AM_I value, and a node returns its strap byte for any read.
+    let mut bus = FakeBus::new(vec![FakeNode::new(0x6C, &[0; 32], 32).at(0x6A)]);
+    assert_eq!(
+        run(&mut bus),
+        vec![Found::Chip(a(0x6A), ChipKind::Lsm6dsox)]
+    );
+}
+
+#[test]
+fn node_moved_into_the_hub_range_is_a_node() {
+    let mut bus = FakeBus::new(vec![FakeNode::new(0x7C, &[0; 3], 3).at(0x71)]);
+    assert_eq!(run(&mut bus), vec![Found::Node(a(0x71), Kind::Buttons)]);
+}
+
+#[test]
+fn every_node_kind_at_its_default_address() {
+    let nodes = NODES
+        .iter()
+        .map(|n| FakeNode::new(n.straps[0], &[0; 32], 3))
+        .collect();
+    let mut bus = FakeBus::new(nodes);
+    let mut want: Vec<Found> = NODES
+        .iter()
+        .map(|n| Found::Node(a(n.straps[0] >> 1), n.kind))
+        .collect();
+    want.sort_by_key(|f| f.address());
+    assert_eq!(run(&mut bus), want);
+}
+
+#[test]
+fn chips_are_identified_by_their_id_checks() {
+    let status = [0x80, 0x10];
+    let sht31 = [status[0], status[1], sensirion_crc8(&status)];
+    let mut bus = FakeBus {
+        chips: vec![
+            FakeChip::new(0x29, 2).reg(0x010F, 0xEB).reg(0x0110, 0xAA),
+            FakeChip::new(0x44, 1),
+            FakeChip::new(0x45, 1).command(&[0xF3, 0x2D], &sht31),
+            FakeChip::new(0x53, 1).reg(0x06, 0xC2),
+            FakeChip::new(0x5C, 1).reg(0x0F, 0xB1),
+            FakeChip::new(0x6B, 1).reg(0x0F, 0x6C),
+        ],
+        ..Default::default()
+    };
+    assert_eq!(
+        run(&mut bus),
+        vec![
+            Found::Chip(a(0x29), ChipKind::Vl53l4),
+            Found::Unknown(a(0x44)),
+            Found::Chip(a(0x45), ChipKind::Sht31),
+            Found::Chip(a(0x53), ChipKind::Ltr381rgb),
+            Found::Chip(a(0x5C), ChipKind::Lps22hb),
+            Found::Chip(a(0x6B), ChipKind::Lsm6dsox),
+        ]
+    );
+}
+
+#[test]
+fn wrong_chip_id_is_unknown() {
+    let mut bus = FakeBus {
+        chips: vec![
+            FakeChip::new(0x5C, 1).reg(0x0F, 0xB3),
+            FakeChip::new(0x53, 1).reg(0x06, 0xB2),
+            FakeChip::new(0x45, 1).command(&[0xF3, 0x2D], &[0x80, 0x10, 0x00]),
+        ],
+        ..Default::default()
+    };
+    assert_eq!(
+        run(&mut bus),
+        vec![
+            Found::Unknown(a(0x45)),
+            Found::Unknown(a(0x53)),
+            Found::Unknown(a(0x5C)),
+        ]
+    );
+}
+
+#[test]
+fn scan_behind_a_port_skips_the_hubs_above() {
+    let inner = FakeHub::new(0x71).with_nodes(2, vec![FakeNode::new(0x7C, &[0; 3], 3)]);
+    let outer = FakeHub::new(0x70)
+        .with_nodes(0, vec![FakeNode::new(0x58, &[0; 3], 3)])
+        .with_hub(1, inner);
+    let bus = RefCell::new(FakeBus::with_hubs(vec![outer]));
+    let hub = Hub::new(&bus);
+    let mut out = [Found::Unknown(a(1)); 8];
+
+    // Without the skip list, the hub answers through its own port.
+    let n = scan(&mut hub.port(0).unwrap(), &mut out).unwrap();
+    assert_eq!(
+        &out[..n],
+        [Found::Node(a(0x2C), Kind::Joystick), Found::Hub(a(0x70))]
+    );
+
+    let n = scan_except(&mut hub.port(0).unwrap(), &[a(0x70)], &mut out).unwrap();
+    assert_eq!(&out[..n], [Found::Node(a(0x2C), Kind::Joystick)]);
+
+    // Port 1 carries the inner hub, which is found as a hub.
+    let n = scan_except(&mut hub.port(1).unwrap(), &[a(0x70)], &mut out).unwrap();
+    assert_eq!(&out[..n], [Found::Hub(a(0x71))]);
+
+    // Through the inner hub's port 2, skip both hubs above.
+    let outer_port = RefCell::new(hub.port(1).unwrap());
+    let inner = Hub::with_address(&outer_port, a(0x71)).unwrap();
+    let n = scan_except(&mut inner.port(2).unwrap(), &[a(0x70), a(0x71)], &mut out).unwrap();
+    assert_eq!(&out[..n], [Found::Node(a(0x3E), Kind::Buttons)]);
+
+    let bus = bus.into_inner();
+    assert_eq!(bus.hub(0x70).control, 0);
+    assert_eq!(bus.hub(0x71).control, 0);
+}
+
+#[test]
+fn a_full_buffer_still_counts_everything() {
+    let mut bus = FakeBus::new(vec![
+        FakeNode::new(0x7C, &[0; 3], 3),
+        FakeNode::new(0x3C, &[0; 3], 8),
+        FakeNode::new(0x58, &[0; 3], 3),
+    ]);
+    let mut out = [Found::Unknown(a(1)); 2];
+    assert_eq!(scan(&mut bus, &mut out).unwrap(), 3);
+    assert_eq!(
+        out,
+        [
+            Found::Node(a(0x1E), Kind::Buzzer),
+            Found::Node(a(0x2C), Kind::Joystick)
+        ]
+    );
+}
+
+#[test]
+fn empty_bus_finds_nothing() {
+    assert!(run(&mut FakeBus::default()).is_empty());
+}
+
+#[test]
+fn hub_check_restores_the_control_byte_it_found() {
+    let mut hub = FakeHub::new(0x72);
+    hub.control = 0x04;
+    let mut bus = FakeBus::with_hubs(vec![hub]);
+    assert_eq!(run(&mut bus), vec![Found::Hub(a(0x72))]);
+    assert_eq!(bus.hub(0x72).control, 0x04);
+}
+
+/// A bus where one address fails with a bus error rather than a NACK.
+struct Faulty(FakeBus, u8);
+
+impl embedded_hal::i2c::ErrorType for Faulty {
+    type Error = embedded_hal::i2c::ErrorKind;
+}
+
+impl embedded_hal::i2c::I2c for Faulty {
+    fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [embedded_hal::i2c::Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        if address == self.1 {
+            return Err(embedded_hal::i2c::ErrorKind::Bus);
+        }
+        self.0.transaction(address, operations).map_err(|_| {
+            embedded_hal::i2c::ErrorKind::NoAcknowledge(
+                embedded_hal::i2c::NoAcknowledgeSource::Address,
+            )
+        })
+    }
+}
+
+#[test]
+fn a_bus_error_stops_the_scan() {
+    let mut bus = Faulty(FakeBus::new(vec![FakeNode::new(0x7C, &[0; 3], 3)]), 0x10);
+    let mut out = [Found::Unknown(a(1)); 4];
+    assert_eq!(
+        scan(&mut bus, &mut out),
+        Err(modulino_driver::Error::I2c(
+            embedded_hal::i2c::ErrorKind::Bus
+        ))
+    );
+}

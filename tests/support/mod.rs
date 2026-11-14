@@ -146,6 +146,8 @@ pub struct FakeBus {
     pub nodes: Vec<FakeNode>,
     /// Hubs on the bus; their ports carry further buses.
     pub hubs: Vec<FakeHub>,
+    /// Register-based chips on the bus.
+    pub chips: Vec<FakeChip>,
     /// Transactions attempted, answered or not.
     pub transactions: usize,
     /// Shared with a `FakeDelay` to record the order of bus and delay.
@@ -191,9 +193,84 @@ impl FakeHub {
     }
 }
 
+/// A register-based sensor: a write of `index_len` bytes sets the register
+/// pointer (big-endian), further bytes write registers, and a read returns
+/// registers from the pointer on, auto-incrementing. Unset registers read
+/// 0x00. A write that equals one of `commands` instead queues that
+/// command's reply for the next read (SHT3x style).
+#[derive(Debug, Clone)]
+pub struct FakeChip {
+    /// 7-bit address.
+    pub addr: u8,
+    /// Register index width in bytes: 1, or 2 for the VL53L4.
+    pub index_len: usize,
+    /// Register contents.
+    pub regs: std::collections::BTreeMap<u16, u8>,
+    /// Command bytes and the reply each queues.
+    pub commands: Vec<(Vec<u8>, Vec<u8>)>,
+    pointer: u16,
+    reply: Option<Vec<u8>>,
+}
+
+impl FakeChip {
+    /// A chip at `addr` with `index_len`-byte register indices.
+    pub fn new(addr: u8, index_len: usize) -> Self {
+        Self {
+            addr,
+            index_len,
+            regs: Default::default(),
+            commands: Vec::new(),
+            pointer: 0,
+            reply: None,
+        }
+    }
+
+    /// The same chip with `register` set to `value`.
+    pub fn reg(mut self, register: u16, value: u8) -> Self {
+        self.regs.insert(register, value);
+        self
+    }
+
+    /// The same chip answering `command` with `reply` on the next read.
+    pub fn command(mut self, command: &[u8], reply: &[u8]) -> Self {
+        self.commands.push((command.to_vec(), reply.to_vec()));
+        self
+    }
+
+    fn write(&mut self, data: &[u8]) {
+        if let Some((_, reply)) = self.commands.iter().find(|(c, _)| c == data) {
+            self.reply = Some(reply.clone());
+            return;
+        }
+        if data.len() < self.index_len {
+            return;
+        }
+        let (index, values) = data.split_at(self.index_len);
+        self.pointer = index.iter().fold(0u16, |acc, &b| acc << 8 | b as u16);
+        for &v in values {
+            self.regs.insert(self.pointer, v);
+            self.pointer = self.pointer.wrapping_add(1);
+        }
+    }
+
+    fn read(&mut self, buf: &mut [u8]) {
+        if let Some(reply) = self.reply.take() {
+            for (i, b) in buf.iter_mut().enumerate() {
+                *b = reply.get(i).copied().unwrap_or(0xFF);
+            }
+            return;
+        }
+        for b in buf.iter_mut() {
+            *b = self.regs.get(&self.pointer).copied().unwrap_or(0);
+            self.pointer = self.pointer.wrapping_add(1);
+        }
+    }
+}
+
 /// One addressable thing a transaction reached.
 enum Target<'a> {
     Node(&'a mut FakeNode),
+    Chip(&'a mut FakeChip),
     /// A hub's control byte and its write log.
     Hub(&'a mut u8, &'a mut Vec<u8>),
 }
@@ -266,6 +343,11 @@ impl FakeBus {
                 out.push(Target::Node(node));
             }
         }
+        for chip in self.chips.iter_mut() {
+            if addr != 0 && chip.addr == addr {
+                out.push(Target::Chip(chip));
+            }
+        }
         for hub in self.hubs.iter_mut() {
             let (hub_addr, control) = (hub.addr, hub.control);
             // The hub answers its own address while its connected ports
@@ -311,6 +393,7 @@ impl I2c for FakeBus {
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => n.write(data),
+                            Target::Chip(c) => c.write(data),
                             Target::Hub(control, writes) => {
                                 if let Some(&last) = data.last() {
                                     **control = last;
@@ -328,6 +411,7 @@ impl I2c for FakeBus {
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => n.read(&mut mine),
+                            Target::Chip(c) => c.read(&mut mine),
                             Target::Hub(control, _) => mine.fill(**control),
                         }
                         buf.iter_mut().zip(&mine).for_each(|(b, m)| *b &= m);
