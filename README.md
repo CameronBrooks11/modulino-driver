@@ -345,10 +345,14 @@ for f in &found[..n.min(found.len())] {
 ```
 
 Each answer is identified by evidence: a hub by its control register, a
-chip by its ID register, a node board by the strap byte it sends first,
-never by its address alone. A Thermo board's HS3003 has no readable
-identity and shows as `Unknown(0x44)`. Behind a hub, call `scan_except` on
-the port and skip the hub's own address.
+chip by its ID register (the SHT31 by its status checksum), a node board by
+the strap byte it sends first, never by its address alone. A Thermo
+board's HS3003 has no readable identity and shows as `Unknown(0x44)`.
+Behind a hub, call `scan_except` on the port and skip that hub and every
+hub above it: a hub answers through its own ports, and through port 2 its
+reply looks like a latch relay. The identity checks write register
+indexes, which other (non-Modulino) chips at those addresses may act on.
+See the `scan` module docs for the remaining limits.
 
 ## Features
 

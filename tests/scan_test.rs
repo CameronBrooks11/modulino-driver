@@ -247,3 +247,73 @@ fn a_bus_error_stops_the_scan() {
         ))
     );
 }
+
+#[test]
+fn hs3003_data_that_looks_like_a_strap_is_still_unknown() {
+    // The HS3003's first byte is status bits and humidity; at ~38 % RH it
+    // reads 0x58, the Joystick strap. Every strap byte is tried.
+    for strap in NODES.iter().flat_map(|n| n.straps.iter().copied()) {
+        let mut bus = FakeBus {
+            chips: vec![FakeChip::new(0x44, 1).reg(0, strap)],
+            ..Default::default()
+        };
+        assert_eq!(run(&mut bus), vec![Found::Unknown(a(0x44))], "{strap:#04x}");
+    }
+}
+
+fn sht31(reply_after: usize) -> FakeChip {
+    let status = [0x80, 0x10];
+    let mut chip = FakeChip::new(0x45, 1).command(
+        &[0xF3, 0x2D],
+        &[status[0], status[1], sensirion_crc8(&status)],
+    );
+    chip.nack_idle_reads = true;
+    chip.reply_after = reply_after;
+    chip
+}
+
+#[test]
+fn sht31_that_nacks_idle_reads_is_found() {
+    let mut bus = FakeBus {
+        chips: vec![sht31(5)],
+        ..Default::default()
+    };
+    assert_eq!(run(&mut bus), vec![Found::Chip(a(0x45), ChipKind::Sht31)]);
+}
+
+#[test]
+fn sht31_reply_retries_are_bounded() {
+    let mut bus = FakeBus {
+        chips: vec![sht31(1000)],
+        ..Default::default()
+    };
+    assert!(run(&mut bus).is_empty());
+}
+
+#[test]
+fn failed_hub_check_still_restores_the_control_byte() {
+    // A second hub at 0x70 on port 0 joins the segment once port 0 is
+    // connected, so the read-back no longer matches.
+    let inner = FakeHub::new(0x70);
+    let mut bus = FakeBus::with_hubs(vec![FakeHub::new(0x70).with_hub(0, inner)]);
+    run(&mut bus);
+    assert_eq!(bus.hubs[0].control, 0, "port 0 disconnected again");
+
+    // A board moved to 0x70 behind port 0.
+    let board = FakeNode::new(0x7C, &[0; 3], 3).at(0x70);
+    let mut bus = FakeBus::with_hubs(vec![FakeHub::new(0x70).with_nodes(0, vec![board])]);
+    run(&mut bus);
+    assert_eq!(bus.hubs[0].control, 0, "port 0 disconnected again");
+}
+
+#[test]
+fn parent_hub_through_port_2_looks_like_a_latch_relay() {
+    // Why scan_except exists: through port n the hub reads back 1 << n.
+    let bus = RefCell::new(FakeBus::with_hubs(vec![FakeHub::new(0x70)]));
+    let hub = Hub::new(&bus);
+    let mut out = [Found::Unknown(a(1)); 4];
+    let n = scan(&mut hub.port(2).unwrap(), &mut out).unwrap();
+    assert_eq!(&out[..n], [Found::Node(a(0x70), Kind::LatchRelay)]);
+    let n = scan_except(&mut hub.port(2).unwrap(), &[a(0x70)], &mut out).unwrap();
+    assert_eq!(n, 0);
+}

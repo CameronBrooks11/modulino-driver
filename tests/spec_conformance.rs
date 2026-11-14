@@ -97,3 +97,10 @@ fn chips_toml_matches_spec_rs() {
         assert_eq!(chip_id(&row["id"]), spec.id, "{name}: id");
     }
 }
+
+#[test]
+fn chip_kinds_match_their_names() {
+    for chip in CHIPS {
+        assert_eq!(format!("{:?}", chip.kind).to_lowercase(), chip.name);
+    }
+}

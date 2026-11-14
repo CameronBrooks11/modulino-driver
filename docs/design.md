@@ -332,12 +332,14 @@ zero-length write, because some HALs (RP2040's I2C block is the known case)
 refuse zero-length writes. Addresses that answer are classified by evidence:
 
 1. **0x70-0x77**: hub check first. Write an odd port mask, read it back,
-   restore the byte the probe read. A 1-byte write to a node is shorter than any node frame, so a
+   and restore the byte the probe read whatever the read-back shows. A 1-byte write to a node is shorter than any node frame, so a
    node drops it, and a node's read-back is its strap byte, which is always
    even, so it can never echo the mask.
 2. **A chip's datasheet address**: the chip's identity check from
    `spec/chips.toml` (an ID register, or the SHT31's status CRC). The HS3003
-   has no readable identity, so it is `Unknown`.
+   has no readable identity and its first data byte can equal a strap byte,
+   so anything at 0x44 is `Unknown`. The SHT3x NACKs reads with no data
+   pending, so at 0x45 a NACKed probe still runs the status check.
 3. **Anywhere**: strap byte from the probe read maps to a node kind.
 4. Otherwise `Unknown`. Never a guess from the address table.
 
@@ -484,7 +486,8 @@ From cheapest to most expensive. Each rung proves only itself.
 | Is a short write really dropped? | Confirms the Vibro `off()` bug | Vibro on for 5 s, send the 8-byte off, observe |
 | Does the prefix hazard reproduce? | Confirms D8 is protecting against something real | Buzzer at 17987 Hz through a raw write, then scan: the board should come back at its strap default |
 | Which firmware revision do shipped boards run? | Revision rows, Knob behaviour | Read strap and frame lengths from every board on arrival |
-| Which Distance and Thermo variants arrive? | VL53L4ED and SHT31 paths | Read the ID registers |
+| Which Distance and Thermo variants arrive? | VL53L4ED and SHT31 paths | Read the ID registers; scan finds an SHT31 at 0x45 |
+| Does the Linux host report a NACK as `NoAcknowledge`? | Scan treats any other error as fatal | Scan an empty bus through `linux-embedded-hal` |
 
 Flashing a board or changing an address on the bench is an ask-first step.
 

@@ -208,8 +208,13 @@ pub struct FakeChip {
     pub regs: std::collections::BTreeMap<u16, u8>,
     /// Command bytes and the reply each queues.
     pub commands: Vec<(Vec<u8>, Vec<u8>)>,
+    /// NACK a read while no reply is pending, as an SHT3x does.
+    pub nack_idle_reads: bool,
+    /// Reads NACKed after a command before its reply is ready.
+    pub reply_after: usize,
     pointer: u16,
     reply: Option<Vec<u8>>,
+    not_ready: usize,
 }
 
 impl FakeChip {
@@ -220,8 +225,11 @@ impl FakeChip {
             index_len,
             regs: Default::default(),
             commands: Vec::new(),
+            nack_idle_reads: false,
+            reply_after: 0,
             pointer: 0,
             reply: None,
+            not_ready: 0,
         }
     }
 
@@ -240,6 +248,7 @@ impl FakeChip {
     fn write(&mut self, data: &[u8]) {
         if let Some((_, reply)) = self.commands.iter().find(|(c, _)| c == data) {
             self.reply = Some(reply.clone());
+            self.not_ready = self.reply_after;
             return;
         }
         if data.len() < self.index_len {
@@ -251,6 +260,15 @@ impl FakeChip {
             self.regs.insert(self.pointer, v);
             self.pointer = self.pointer.wrapping_add(1);
         }
+    }
+
+    /// Whether this read is NACKed (and counts down a pending reply).
+    fn nacks_read(&mut self) -> bool {
+        if self.reply.is_some() && self.not_ready > 0 {
+            self.not_ready -= 1;
+            return true;
+        }
+        self.reply.is_none() && self.nack_idle_reads
     }
 
     fn read(&mut self, buf: &mut [u8]) {
@@ -404,6 +422,15 @@ impl I2c for FakeBus {
                     }
                 }
                 Operation::Read(buf) => {
+                    let mut nacked = false;
+                    for t in targets.iter_mut() {
+                        if let Target::Chip(c) = t {
+                            nacked |= c.nacks_read();
+                        }
+                    }
+                    if nacked {
+                        return Err(Nack(address));
+                    }
                     // Open-drain: with several devices answering, a bit
                     // reads 1 only if every device sends 1.
                     buf.fill(0xFF);

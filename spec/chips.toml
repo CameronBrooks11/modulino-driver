@@ -28,10 +28,14 @@ kind = "vl53l4"
 module = "distance"
 addresses = [0x29]
 id = { method = "register16", register = 0x010F, value = 0xEB, mask = 0xFF }
-# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows).
-# The VL53L4ED is assumed to report the same; the bench confirms it.
+# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows),
+# from memory of ST's driver. The VL53L4ED is assumed to report the same.
+# Counter-evidence to weigh at the bench: arduino-modulino-mpy disabled its
+# model ID check upstream (lib/vl53l4cd.py:90-92, commit 7ff5e3c), and
+# Arduino_Modulino falls back from VL53L4CD to VL53L4ED initialisation
+# (Modulino.h:946-955).
 verified = false
-source = "arduino-modulino-mpy lib/vl53l4cd.py:66, 90-92; Modulino.h:938-939"
+source = "arduino-modulino-mpy lib/vl53l4cd.py:66 (register only); Modulino.h:938-939"
 
 [[chip]]
 kind = "hs3003"
@@ -46,7 +50,9 @@ kind = "sht31"
 module = "thermo"
 addresses = [0x45]
 id = { method = "sht3x_status", command = 0xF32D }
-verified = true
+# The SHT3x NACKs a read with no data pending, so scan runs this check even
+# when the probe NACKs, and retries the status read. Unconfirmed on hardware.
+verified = false
 source = "Sensirion SHT3x-DIS datasheet: status register command F32Dh, CRC-8 0x31/0xFF, CRC(BEEFh) = 92h; Modulino.h:624"
 
 [[chip]]
