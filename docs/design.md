@@ -263,8 +263,8 @@ Minimal register drivers for what each module exposes, written in the crate:
 | Chip | Module | Starting point | Notes |
 |---|---|---|---|
 | LSM6DSOX | Movement | `movement.rs` | Try 0x6A then 0x6B; WHO_AM_I 0x6C |
-| VL53L4CD | Distance | `distance.rs` | Fix the silent timeouts |
-| VL53L4ED | Distance | new, from ST's ULD register map | Variant selected by model ID |
+| VL53L4CD | Distance | ST's driver (stm32duino `VL53L4CD` at `b6ed0e2`) | Replaces `distance.rs`: bounded waits, timing computed from the oscillator |
+| VL53L4ED | Distance | ST's driver (stm32duino `VL53L4ED` at `a94cc0b`) | Same register map and configuration; model ID 0xEC (not 0xEB), 100 ms default budget, no first-sample wait |
 | HS3003 | Thermo | `hs3003` crate 0.1.1 | Replaced by a 60-line driver: the crate ignores the stale-sample status bits and waits a fixed 100 ms |
 | SHT31 | Thermo | new, about 80 lines | Fallback at 0x45 (`Modulino.h:614-627`) |
 | LTR381RGB | Light | `light.rs` | Trim to the lux/RGB path |
@@ -499,6 +499,7 @@ From cheapest to most expensive. Each rung proves only itself.
 | Does the prefix hazard reproduce? | Confirms D8 is protecting against something real | Buzzer at 17987 Hz through a raw write, then scan: the board should come back at its strap default |
 | Which firmware revision do shipped boards run? | Revision rows, Knob behaviour | Read strap and frame lengths from every board on arrival |
 | Which Distance and Thermo variants arrive? | VL53L4ED and SHT31 paths | Read the ID registers; scan finds an SHT31 at 0x45 |
+| Does Distance range correctly after `init`? | The configuration and timing are ported from ST's source, never run | Range a flat target at a measured distance; expect status 0 and a reading within the datasheet's accuracy |
 | Does the Linux host report a NACK as `NoAcknowledge`? | Scan treats any other error as fatal | Scan an empty bus through `linux-embedded-hal` |
 
 Flashing a board or changing an address on the bench is an ask-first step.

@@ -24,19 +24,23 @@ verified = true
 source = "ST LSM6DSOX datasheet WHO_AM_I (0Fh) = 6Ch; Arduino_Modulino Modulino.h:533; arduino-modulino-mpy movement.py:15"
 
 [[chip]]
-kind = "vl53l4"
+kind = "vl53l4cd"
 module = "distance"
 addresses = [0x29]
 id = { method = "register16", register = 0x010F, value = 0xEB, mask = 0xFF }
-# The VL53L4CD reports model ID 0xEB at 0x010F (module type 0xAA follows);
-# arduino-modulino-mpy names both values at lib/vl53l4cd.py:91. The
-# VL53L4ED is assumed to report the same.
-# Counter-evidence to weigh at the bench: arduino-modulino-mpy disabled its
-# model ID check upstream (lib/vl53l4cd.py:90-92, commit 7ff5e3c), and
-# Arduino_Modulino falls back from VL53L4CD to VL53L4ED initialisation
-# (Modulino.h:946-955).
-verified = false
-source = "arduino-modulino-mpy lib/vl53l4cd.py:66, 91; Modulino.h:938-939"
+verified = true
+source = "stm32duino/VL53L4CD@b6ed0e2 src/vl53l4cd_class.h InitSensor (model ID 0xEBAA); Modulino.h:939-947"
+
+[[chip]]
+kind = "vl53l4ed"
+module = "distance"
+addresses = [0x29]
+# Not the CD's value, as this file assumed before: ST's VL53L4ED driver
+# checks 0xECAA. Arduino_Modulino tries the CD first and falls back to the
+# ED. The bench confirms which variant ships.
+id = { method = "register16", register = 0x010F, value = 0xEC, mask = 0xFF }
+verified = true
+source = "stm32duino/VL53L4ED@a94cc0b src/vl53l4ed_class.h InitSensor (model ID 0xECAA); Modulino.h:946-952"
 
 [[chip]]
 kind = "hs3003"

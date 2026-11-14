@@ -212,6 +212,8 @@ pub struct FakeChip {
     pub nack_idle_reads: bool,
     /// Reads NACKed after a command before its reply is ready.
     pub reply_after: usize,
+    /// Registers that ignore writes, as status registers do.
+    pub read_only: Vec<u16>,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
@@ -227,6 +229,7 @@ impl FakeChip {
             commands: Vec::new(),
             nack_idle_reads: false,
             reply_after: 0,
+            read_only: Vec::new(),
             pointer: 0,
             reply: None,
             not_ready: 0,
@@ -237,6 +240,12 @@ impl FakeChip {
     pub fn reg(mut self, register: u16, value: u8) -> Self {
         self.regs.insert(register, value);
         self
+    }
+
+    /// The same chip with a read-only `register` holding `value`.
+    pub fn fixed(mut self, register: u16, value: u8) -> Self {
+        self.read_only.push(register);
+        self.reg(register, value)
     }
 
     /// The same chip answering `command` with `reply` on the next read.
@@ -257,7 +266,9 @@ impl FakeChip {
         let (index, values) = data.split_at(self.index_len);
         self.pointer = index.iter().fold(0u16, |acc, &b| acc << 8 | b as u16);
         for &v in values {
-            self.regs.insert(self.pointer, v);
+            if !self.read_only.contains(&self.pointer) {
+                self.regs.insert(self.pointer, v);
+            }
             self.pointer = self.pointer.wrapping_add(1);
         }
     }

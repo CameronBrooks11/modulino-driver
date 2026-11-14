@@ -21,7 +21,7 @@ Apache-2.0 licence.
 | `Buttons` | STM32C011 node | **Internal** | 0x3E |
 | `Buzzer` | STM32C011 node | **Internal** | 0x1E |
 | `Pixels` | STM32C011 node, APA102-style LEDs | **Internal** | 0x36 |
-| `Distance` | VL53L4CD (VL53L4ED variant not yet supported) | **Internal** | 0x29 |
+| `Distance` | VL53L4CD or VL53L4ED | **Internal** | 0x29 |
 | `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
 | `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B |
 | `Thermo` | HS3003, or SHT31 on some boards | **Internal** | 0x44 / 0x45 |
@@ -120,14 +120,18 @@ println!("Humidity: {:.1}%", reading.humidity);
 ```rust
 use modulino_driver::Distance;
 
-let mut distance = Distance::new(i2c)?;
+let mut distance = Distance::new(i2c);
+distance.init(&mut delay)?; // finds the VL53L4CD or VL53L4ED; bounded waits
+distance.start_ranging(&mut delay)?;
 
-// Start continuous ranging
-distance.start_ranging()?;
-
-// Read distance in millimeters
-let mm = distance.read_distance_blocking()?;
-println!("Distance: {} mm", mm);
+loop {
+    if distance.data_ready()? {
+        let r = distance.read()?;
+        if r.status == 0 {
+            println!("Distance: {} mm", r.distance_mm);
+        }
+    }
+}
 ```
 
 ### Example: Rotary Encoder

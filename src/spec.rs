@@ -197,8 +197,10 @@ pub const MAX_READ_PAYLOAD: usize = 32;
 pub enum ChipKind {
     /// LSM6DSOX accelerometer and gyroscope (Modulino Movement)
     Lsm6dsox,
-    /// VL53L4CD or VL53L4ED time-of-flight sensor (Modulino Distance)
-    Vl53l4,
+    /// VL53L4CD time-of-flight sensor (Modulino Distance)
+    Vl53l4cd,
+    /// VL53L4ED time-of-flight sensor (Modulino Distance variant)
+    Vl53l4ed,
     /// HS3003 temperature and humidity sensor (Modulino Thermo)
     Hs3003,
     /// SHT31 temperature and humidity sensor (Modulino Thermo variant)
@@ -254,7 +256,7 @@ pub struct ChipSpec {
 }
 
 /// Every chip kind, in `spec/chips.toml` order.
-pub const CHIPS: [ChipSpec; 6] = [
+pub const CHIPS: [ChipSpec; 7] = [
     ChipSpec {
         kind: ChipKind::Lsm6dsox,
         name: "lsm6dsox",
@@ -266,12 +268,22 @@ pub const CHIPS: [ChipSpec; 6] = [
         },
     },
     ChipSpec {
-        kind: ChipKind::Vl53l4,
-        name: "vl53l4",
+        kind: ChipKind::Vl53l4cd,
+        name: "vl53l4cd",
         addresses: &[0x29],
         id: ChipId::Register16 {
             register: 0x010F,
             value: 0xEB,
+            mask: 0xFF,
+        },
+    },
+    ChipSpec {
+        kind: ChipKind::Vl53l4ed,
+        name: "vl53l4ed",
+        addresses: &[0x29],
+        id: ChipId::Register16 {
+            register: 0x010F,
+            value: 0xEC,
             mask: 0xFF,
         },
     },
