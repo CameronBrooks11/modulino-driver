@@ -10,8 +10,7 @@
 //! - [`Distance`] - Time-of-Flight distance sensor (VL53L4CD; the VL53L4ED variant is not yet supported)
 //! - [`Movement`] - IMU module (LSM6DSOX accelerometer/gyroscope)
 //! - [`Knob`] - Rotary encoder with button
-//! - [`Thermo`] - Temperature and humidity sensor (HS3003, wraps the [`hs3003`](https://crates.io/crates/hs3003) crate;
-//!   the SHT31 variant is not yet supported)
+//! - [`Thermo`] - Temperature and humidity sensor (HS3003 or SHT31)
 //! - [`Joystick`] - Analog joystick with button
 //! - [`LatchRelay`] - Latching relay module
 //! - [`Vibro`] - Vibration motor module
@@ -64,9 +63,9 @@ mod i2c_device;
 mod node;
 pub mod scan;
 pub mod spec;
-mod thermo;
 
 pub use addr::{Address, NewAddress, Strap};
+pub use chips::hs3003::ThermoReading;
 pub use chips::lps22hb::Lps22hb;
 pub use chips::lsm6dsox::{Axes, Lsm6dsox};
 pub use chips::ltr381rgb::{LightReading, Ltr381rgb};
@@ -86,6 +85,7 @@ pub use devices::led_matrix::LedMatrix;
 pub use devices::motors::Motors;
 pub use devices::opto_relay::OptoRelay;
 pub use devices::pixels::Pixels;
+pub use devices::thermo::Thermo;
 pub use devices::vibro::Vibro;
 pub use distance::Distance;
 pub use error::{Error, Result};
@@ -94,7 +94,6 @@ pub use i2c_device::I2cDevice;
 pub use node::Node;
 pub use scan::{scan, scan_except, Found};
 pub use spec::{ChipKind, Kind};
-pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 
 /// Default I2C addresses for Modulino devices.
 ///
@@ -103,9 +102,6 @@ pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 pub mod addresses {
     /// Default address for Modulino Distance
     pub const DISTANCE: u8 = 0x29;
-
-    /// Default address for Modulino Thermo
-    pub const THERMO: u8 = 0x44;
 }
 
 /// Modulino Movement: an [`Lsm6dsox`] at 0x6A or 0x6B.

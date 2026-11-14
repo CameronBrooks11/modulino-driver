@@ -252,3 +252,138 @@ mod light {
         assert_eq!(Light::new(FakeBus::default()).release().transactions, 0);
     }
 }
+
+mod thermo {
+    use super::*;
+    use embedded_hal::i2c::{ErrorKind, NoAcknowledgeSource};
+    use modulino_driver::chips::{hs3003, sht31};
+    use modulino_driver::spec::sensirion_crc8;
+    use modulino_driver::Thermo;
+    use support::FakeDelay;
+
+    const NACK: ErrorKind = ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address);
+
+    /// HS3003 fetch: status 00, humidity 0x2000 (50 %), temperature
+    /// 6454 << 2 (25.0 C).
+    const HS_FRESH: [u8; 4] = [0x20, 0x00, 0x64, 0xD8];
+    /// The same with status 01: a sample already read.
+    const HS_STALE: [u8; 4] = [0x60, 0x00, 0x64, 0xD8];
+
+    fn sht_result(t: u16, rh: u16) -> Vec<u8> {
+        let (t, rh) = (t.to_be_bytes(), rh.to_be_bytes());
+        vec![
+            t[0],
+            t[1],
+            sensirion_crc8(&t),
+            rh[0],
+            rh[1],
+            sensirion_crc8(&rh),
+        ]
+    }
+
+    fn sht_status() -> Vec<u8> {
+        vec![0x80, 0x10, sensirion_crc8(&[0x80, 0x10])]
+    }
+
+    #[test]
+    fn hs3003_decodes_and_skips_stale_samples() {
+        let r = hs3003::decode(&HS_FRESH).unwrap();
+        assert!((r.temperature - 25.0).abs() < 0.01, "{r:?}");
+        assert!((r.humidity - 50.0).abs() < 0.01, "{r:?}");
+        assert_eq!(hs3003::decode(&HS_STALE), None);
+    }
+
+    #[test]
+    fn hs3003_sequence_with_one_stale_fetch() {
+        let a = 0x44;
+        let expectations = [
+            T::read(a, vec![0x00]),
+            T::write(a, vec![0x00]),
+            T::read(a, HS_STALE.to_vec()),
+            T::read(a, HS_FRESH.to_vec()),
+        ];
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        assert_eq!(thermo.verify().unwrap(), ChipKind::Hs3003);
+        let mut delay = FakeDelay::default();
+        let r = thermo.read(&mut delay).unwrap();
+        assert!((r.temperature - 25.0).abs() < 0.01);
+        // 40 ms conversion, 5 ms before the second fetch.
+        assert_eq!(delay.total_ns, 45 * 1_000_000);
+        thermo.release().done();
+    }
+
+    #[test]
+    fn hs3003_that_stays_stale_times_out() {
+        let a = 0x44;
+        let mut expectations = vec![T::read(a, vec![0x00]), T::write(a, vec![0x00])];
+        expectations.extend((0..hs3003::FETCHES).map(|_| T::read(a, HS_STALE.to_vec())));
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        let mut delay = FakeDelay::default();
+        assert_eq!(thermo.read(&mut delay), Err(Error::Timeout));
+        // 40 ms conversion, then 5 ms before each fetch after the first.
+        let waited = 40 + 5 * (hs3003::FETCHES as u64 - 1);
+        assert_eq!(delay.total_ns, waited * 1_000_000);
+        thermo.release().done();
+    }
+
+    #[test]
+    fn falls_back_to_sht31_and_retries_a_busy_read() {
+        let expectations = [
+            T::read(0x44, vec![0x00]).with_error(NACK),
+            T::write(0x45, vec![0xF3, 0x2D]),
+            T::read(0x45, sht_status()),
+            T::write(0x45, vec![0x24, 0x00]),
+            T::read(0x45, vec![0; 6]).with_error(NACK),
+            T::read(0x45, sht_result(0x6666, 0x8000)),
+        ];
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        let mut delay = FakeDelay::default();
+        let r = thermo.read(&mut delay).unwrap();
+        assert_eq!(thermo.chip(), Some(ChipKind::Sht31));
+        assert_eq!(thermo.address().map(|a| a.get()), Some(0x45));
+        assert!((r.temperature - 25.0).abs() < 0.01, "{r:?}");
+        assert!((r.humidity - 50.0).abs() < 0.01, "{r:?}");
+        // 15 ms measurement, 1 ms before the second read.
+        assert_eq!(delay.total_ns, 16 * 1_000_000);
+        thermo.release().done();
+    }
+
+    #[test]
+    fn sht31_bad_crc_is_a_data_error() {
+        let mut bad = sht_result(0x6666, 0x8000);
+        bad[5] ^= 0xFF;
+        assert_eq!(sht31::decode(&bad.clone().try_into().unwrap()), None);
+        let expectations = [
+            T::read(0x44, vec![0x00]).with_error(NACK),
+            T::write(0x45, vec![0xF3, 0x2D]),
+            T::read(0x45, sht_status()),
+            T::write(0x45, vec![0x24, 0x00]),
+            T::read(0x45, bad),
+        ];
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        assert_eq!(
+            thermo.read(&mut FakeDelay::default()),
+            Err(Error::DataError)
+        );
+        thermo.release().done();
+    }
+
+    #[test]
+    fn a_bus_fault_at_0x44_outranks_the_sht31_nack() {
+        let expectations = [
+            T::read(0x44, vec![0x00]).with_error(ErrorKind::Bus),
+            T::write(0x45, vec![0xF3, 0x2D]).with_error(NACK),
+        ];
+        let mut thermo = Thermo::new(I2cMock::new(&expectations));
+        assert_eq!(thermo.verify(), Err(Error::I2c(ErrorKind::Bus)));
+        thermo.release().done();
+    }
+
+    #[test]
+    fn nothing_there_is_the_sht31_nack() {
+        let mut thermo = Thermo::new(FakeBus::default());
+        assert_eq!(thermo.verify(), Err(Error::I2c(Nack(0x45))));
+        assert_eq!(thermo.chip(), None);
+        assert_eq!(Thermo::new(FakeBus::default()).release().transactions, 0);
+    }
+}

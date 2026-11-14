@@ -9,4 +9,5 @@ pub mod led_matrix;
 pub mod motors;
 pub mod opto_relay;
 pub mod pixels;
+pub mod thermo;
 pub mod vibro;
