@@ -24,13 +24,19 @@ pub struct KnobState {
 /// The position offset lives on the host: [`Knob::set_position`] never
 /// writes to the board (design D9).
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Knob;
 ///
 /// let mut knob = Knob::new(i2c);
 /// knob.verify()?;
 /// knob.set_position(0)?;
 /// let state = knob.read()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Knob<I2C> {

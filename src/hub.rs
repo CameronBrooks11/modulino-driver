@@ -41,7 +41,11 @@ pub(crate) const PORTS: u8 = 8;
 
 /// A Modulino Hub on a shared bus.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use core::cell::RefCell;
 /// use modulino_driver::{Buttons, Hub};
 ///
@@ -51,6 +55,8 @@ pub(crate) const PORTS: u8 = 8;
 /// let mut right = Buttons::new(hub.port(1).unwrap());
 /// left.set_leds(true, false, false)?;
 /// right.set_leds(false, false, true)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Hub<'a, B> {

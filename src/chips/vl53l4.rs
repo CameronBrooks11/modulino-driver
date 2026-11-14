@@ -153,7 +153,11 @@ pub fn macro_period_us(osc_frequency: u16) -> u32 {
 
 /// VL53L4CD/ED driver; [`Distance`](crate::Distance) is this type.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Distance;
 ///
 /// let mut distance = Distance::new(i2c);
@@ -162,6 +166,8 @@ pub fn macro_period_us(osc_frequency: u16) -> u32 {
 /// if distance.data_ready()? {
 ///     let r = distance.read()?;
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Vl53l4<I2C> {

@@ -28,13 +28,19 @@ const CTRL_REG1_RUN: u8 = 0x22;
 
 /// LPS22HB driver; [`Pressure`](crate::Pressure) is this type.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Pressure;
 ///
 /// let mut pressure = Pressure::new(i2c);
 /// pressure.init()?;
 /// let hpa = pressure.pressure()?;
 /// let celsius = pressure.temperature()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Lps22hb<I2C> {

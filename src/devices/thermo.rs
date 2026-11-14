@@ -40,12 +40,18 @@ impl Sensor {
 /// device that acknowledges at 0x44 is taken for one. [`scan`](fn@crate::scan)
 /// is stricter and reports 0x44 as unknown.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Thermo;
 ///
 /// let mut thermo = Thermo::new(i2c);
 /// let chip = thermo.verify()?; // ChipKind::Hs3003 or ChipKind::Sht31
 /// let reading = thermo.read(&mut delay)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Thermo<I2C> {

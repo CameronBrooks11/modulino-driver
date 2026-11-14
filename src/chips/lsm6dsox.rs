@@ -53,13 +53,19 @@ pub struct Axes {
 
 /// LSM6DSOX driver; [`Movement`](crate::Movement) is this type.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Movement;
 ///
 /// let mut movement = Movement::new(i2c);
 /// movement.init()?; // finds 0x6A or 0x6B, resets, configures
 /// let g = movement.acceleration()?;
 /// let dps = movement.angular_velocity()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Lsm6dsox<I2C> {

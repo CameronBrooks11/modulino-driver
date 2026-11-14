@@ -154,12 +154,18 @@ pub fn lux(green: u32, ir: u32, gain: Gain, resolution: Resolution) -> f32 {
 
 /// LTR-381RGB driver; [`Light`](crate::Light) is this type.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Light;
 ///
 /// let mut light = Light::new(i2c);
 /// light.init()?;
 /// let reading = light.read()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Ltr381rgb<I2C> {
