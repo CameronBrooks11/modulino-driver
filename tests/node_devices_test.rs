@@ -184,8 +184,8 @@ fn joystick_reads_centred_axes() {
 
 #[test]
 fn joystick_dead_zone_defaults_to_26_and_can_be_turned_off() {
-    // 12 and 8 counts off centre: inside the default dead zone. (The axes
-    // are inverted: raw 0 is +127.)
+    // 12 and 8 counts off centre: inside the default dead zone. (The sign
+    // follows Arduino_Modulino's `128 - raw`, so raw 0 is +127.)
     let mut joystick = Joystick::new(bus(0x58, &[140, 120, 0], 3));
     assert_eq!(joystick.deadzone(), 26);
     let centred = JoystickState {
