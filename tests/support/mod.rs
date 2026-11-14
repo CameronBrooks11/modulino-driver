@@ -118,7 +118,21 @@ pub struct FakeBus {
     pub nodes: Vec<FakeNode>,
     /// Transactions attempted, answered or not.
     pub transactions: usize,
+    /// Shared with a `FakeDelay` to record the order of bus and delay.
+    pub log: Option<Log>,
 }
+
+/// One bus transaction or delay, in the order they happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    /// A transaction to this 7-bit address.
+    Bus(u8),
+    /// A delay of this many nanoseconds (consecutive delays merged).
+    Delay(u64),
+}
+
+/// An event log shared by a `FakeBus` and a `FakeDelay`.
+pub type Log = std::rc::Rc<std::cell::RefCell<Vec<Event>>>;
 
 impl FakeBus {
     /// A bus with these boards.
@@ -126,6 +140,7 @@ impl FakeBus {
         Self {
             nodes,
             transactions: 0,
+            log: None,
         }
     }
 
@@ -145,6 +160,9 @@ impl ErrorType for FakeBus {
 impl I2c for FakeBus {
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), Nack> {
         self.transactions += 1;
+        if let Some(log) = &self.log {
+            log.borrow_mut().push(Event::Bus(address));
+        }
         if address == 0 {
             // General call: every node processes writes; nothing reads.
             for op in ops.iter_mut() {
@@ -175,10 +193,19 @@ impl I2c for FakeBus {
 pub struct FakeDelay {
     /// Total requested, in nanoseconds.
     pub total_ns: u64,
+    /// Shared with a `FakeBus` to record the order of bus and delay.
+    pub log: Option<Log>,
 }
 
 impl embedded_hal::delay::DelayNs for FakeDelay {
     fn delay_ns(&mut self, ns: u32) {
         self.total_ns += ns as u64;
+        if let Some(log) = &self.log {
+            let mut log = log.borrow_mut();
+            match log.last_mut() {
+                Some(Event::Delay(total)) => *total += ns as u64,
+                _ => log.push(Event::Delay(ns as u64)),
+            }
+        }
     }
 }

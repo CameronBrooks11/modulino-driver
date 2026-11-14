@@ -91,7 +91,7 @@ use modulino_driver::{Buzzer, Note};
 
 let mut buzzer = Buzzer::new(i2c);
 
-// Play a tone at 440 Hz for 500 ms (below 180 Hz is OutOfRange)
+// Play a tone at 440 Hz for 500 ms (outside 180-5898150 Hz is OutOfRange)
 buzzer.tone(440, 500)?;
 
 // Play a musical note

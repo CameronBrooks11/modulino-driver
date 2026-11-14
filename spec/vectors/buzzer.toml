@@ -8,7 +8,8 @@
 # encode_stop: frequency 0, duration 0, which the firmware treats as stop.
 # `node = "reserved_prefix"` marks a frame the node layer refuses because
 # the firmware would execute it as a command: 17987 = 0x4643 encodes as
-# "CF", an address change to 0x00.
+# "CF" 0x00, which rewrites the address in flash back to the strap default
+# and resets the board (main.c:165, 235-254).
 
 [[encode_tone]]
 args = { frequency_hz = 440, duration_ms = 500 }

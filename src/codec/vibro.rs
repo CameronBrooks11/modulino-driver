@@ -5,7 +5,9 @@
 //! (main.c:182-185), so a duration of 0 stops it within a millisecond and is
 //! refused by [`encode_on`]; the all-zero frame is the stop. Its zero
 //! frequency divides by zero in the firmware, which on the Cortex-M0+ yields
-//! 0. The read payload carries nothing for this kind.
+//! 0. The stop time `tick + duration` also wraps for durations near
+//! `u32::MAX`, stopping the motor almost at once. The read payload carries
+//! nothing for this kind.
 
 use super::OutOfRange;
 use crate::spec::VIBRO;

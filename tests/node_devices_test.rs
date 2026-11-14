@@ -7,10 +7,11 @@ use modulino_driver::{
     Address, Buzzer, Color, Error, Joystick, JoystickState, Kind, Knob, KnobState, LatchRelay,
     Note, OptoRelay, Pixels, PowerLevel, Vibro,
 };
-use support::{FakeBus, FakeDelay, FakeNode};
+use support::{Event, FakeBus, FakeDelay, FakeNode, Log};
 
-// Two HAL_Delay(50) calls can take 104 ms (main.c:315-323).
-const _: () = assert!(SETTLE_MS >= 104);
+// Two HAL_Delay(50) calls take at most about 102 ms (main.c:315-323,
+// stm32c0xx_hal.c:373-387).
+const _: () = assert!(SETTLE_MS >= 102);
 
 fn bus(strap: u8, payload: &[u8], write_len: usize) -> FakeBus {
     FakeBus::new(vec![FakeNode::new(strap, payload, write_len)])
@@ -63,11 +64,11 @@ fn buzzer_refuses_what_the_firmware_cannot_play() {
 #[test]
 fn vibro_off_sends_the_full_frame() {
     let mut vibro = Vibro::new(bus(0x70, &[0; 3], 12));
-    vibro.on(500, PowerLevel::Medium).unwrap();
+    vibro.on(500, PowerLevel::Intense).unwrap();
     vibro.off().unwrap();
     let bus = vibro.release();
     let board = bus.node(0x38);
-    assert_eq!(board.frames[0][8], PowerLevel::Medium as u8, "duty byte");
+    assert_eq!(board.frames[0][8], PowerLevel::Intense as u8, "duty byte");
     // The motor stops only if the board processed the off frame.
     assert_eq!(board.frames.last(), Some(&vec![0u8; 12]));
     assert_eq!((board.frames.len(), board.dropped), (2, 0));
@@ -162,22 +163,67 @@ fn opto_relay_switches_and_reads_the_pin() {
 
 #[test]
 fn latch_relay_answers_at_its_factory_address() {
-    let mut relay = LatchRelay::new(bus(0x04, &[0, 1, 0], 3));
+    let mut board = FakeNode::new(0x04, &[0, 0, 0], 3);
+    // What the firmware reports at power-up (read by verify), after a
+    // set, then after a reset.
+    board
+        .queued
+        .extend([vec![0, 0, 0], vec![0, 1, 0], vec![1, 0, 0]]);
+    let mut relay = LatchRelay::new(FakeBus::new(vec![board]));
     assert_eq!(relay.address().get(), 0x02);
     assert_eq!(relay.address(), Kind::LatchRelay.default_address());
     relay.verify().unwrap();
     let mut delay = FakeDelay::default();
     relay.on(&mut delay).unwrap();
-    relay.off(&mut delay).unwrap();
     assert_eq!(relay.state().unwrap(), Some(true));
+    relay.off(&mut delay).unwrap();
+    assert_eq!(relay.state().unwrap(), Some(false));
     let bus = relay.release();
     assert_eq!(bus.node(0x02).frames, vec![vec![1, 0, 0], vec![0, 0, 0]]);
 }
 
 #[test]
 fn latch_relay_waits_out_the_coil_pulse() {
-    let mut relay = LatchRelay::new(bus(0x04, &[0, 0, 0], 3));
-    let mut delay = FakeDelay::default();
+    let log = Log::default();
+    let mut bus = bus(0x04, &[0, 0, 0], 3);
+    bus.log = Some(log.clone());
+    let mut relay = LatchRelay::new(bus);
+    let mut delay = FakeDelay {
+        log: Some(log.clone()),
+        ..Default::default()
+    };
     relay.on(&mut delay).unwrap();
-    assert_eq!(delay.total_ns, SETTLE_MS as u64 * 1_000_000);
+    relay.off(&mut delay).unwrap();
+    relay.state().unwrap();
+    let wait = Event::Delay(SETTLE_MS as u64 * 1_000_000);
+    assert_eq!(
+        *log.borrow(),
+        [
+            Event::Bus(0x02),
+            wait,
+            Event::Bus(0x02),
+            wait,
+            Event::Bus(0x02)
+        ],
+        "each command is followed by the full wait before the next transfer"
+    );
+}
+
+#[test]
+fn latch_relay_waits_even_when_the_write_fails() {
+    let log = Log::default();
+    let bus = FakeBus {
+        log: Some(log.clone()),
+        ..Default::default()
+    };
+    let mut relay = LatchRelay::new(bus);
+    let mut delay = FakeDelay {
+        log: Some(log.clone()),
+        ..Default::default()
+    };
+    assert!(relay.on(&mut delay).is_err());
+    assert_eq!(
+        *log.borrow(),
+        [Event::Bus(0x02), Event::Delay(SETTLE_MS as u64 * 1_000_000)]
+    );
 }

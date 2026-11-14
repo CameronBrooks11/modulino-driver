@@ -8,7 +8,8 @@
 //! 5 898 150 Hz the compare is 0 and nothing sounds. The stop frame divides
 //! by zero in the firmware; on the Cortex-M0+ that yields 0 and the timer
 //! is stopped by the zero duration. The read payload carries nothing for
-//! this kind.
+//! this kind. The firmware stops the tone at `tick + duration`, which wraps
+//! for durations near `u32::MAX` and then stops almost at once.
 
 use super::OutOfRange;
 use crate::spec::BUZZER;

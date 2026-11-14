@@ -23,27 +23,32 @@ fn load(kind: &str, ops: &[&str]) -> Table {
     doc
 }
 
-/// Every file in spec/vectors/ has a runner below.
+/// Runs every file in spec/vectors/ through the runner for its kind, so a
+/// file with no runner fails here rather than being skipped.
 #[test]
 fn every_vector_file_runs() {
     let dir = format!("{}/spec/vectors", env!("CARGO_MANIFEST_DIR"));
-    let mut files: Vec<String> = std::fs::read_dir(&dir)
+    let mut kinds: Vec<String> = std::fs::read_dir(&dir)
         .expect("spec/vectors")
         .map(|e| e.expect("entry").file_name().into_string().expect("utf-8"))
-        .filter(|name| name.ends_with(".toml"))
+        .filter_map(|name| name.strip_suffix(".toml").map(str::to_owned))
         .collect();
-    files.sort_unstable();
-    let run = [
-        "buttons.toml",
-        "buzzer.toml",
-        "joystick.toml",
-        "knob.toml",
-        "latch_relay.toml",
-        "opto_relay.toml",
-        "pixels.toml",
-        "vibro.toml",
-    ];
-    assert_eq!(files, run);
+    kinds.sort_unstable();
+    assert!(!kinds.is_empty(), "no vector files in {dir}");
+    for kind in kinds {
+        let run: fn() = match kind.as_str() {
+            "buttons" => buttons_vectors,
+            "buzzer" => buzzer_vectors,
+            "joystick" => joystick_vectors,
+            "knob" => knob_vectors,
+            "latch_relay" => latch_relay_vectors,
+            "opto_relay" => opto_relay_vectors,
+            "pixels" => pixels_vectors,
+            "vibro" => vibro_vectors,
+            other => panic!("spec/vectors/{other}.toml has no runner"),
+        };
+        run();
+    }
 }
 
 fn cases<'a>(doc: &'a Table, op: &str) -> &'a [Value] {
@@ -89,7 +94,6 @@ fn check_encode<const N: usize>(case: &Value, got: Result<[u8; N], OutOfRange>) 
     }
 }
 
-#[test]
 fn buttons_vectors() {
     let doc = load("buttons", &["decode", "encode_leds"]);
     for case in cases(&doc, "decode") {
@@ -108,7 +112,6 @@ fn buttons_vectors() {
     }
 }
 
-#[test]
 fn buzzer_vectors() {
     let doc = load("buzzer", &["encode_tone", "encode_stop"]);
     for case in cases(&doc, "encode_tone") {
@@ -120,7 +123,6 @@ fn buzzer_vectors() {
     }
 }
 
-#[test]
 fn vibro_vectors() {
     let doc = load("vibro", &["encode_on", "encode_off"]);
     for case in cases(&doc, "encode_on") {
@@ -134,7 +136,6 @@ fn vibro_vectors() {
     }
 }
 
-#[test]
 fn knob_vectors() {
     let doc = load("knob", &["decode"]);
     for case in cases(&doc, "decode") {
@@ -148,7 +149,6 @@ fn knob_vectors() {
     }
 }
 
-#[test]
 fn joystick_vectors() {
     let doc = load("joystick", &["decode", "to_state"]);
     for case in cases(&doc, "decode") {
@@ -176,7 +176,6 @@ fn joystick_vectors() {
     }
 }
 
-#[test]
 fn opto_relay_vectors() {
     let doc = load("opto_relay", &["encode", "decode"]);
     for case in cases(&doc, "encode") {
@@ -188,7 +187,6 @@ fn opto_relay_vectors() {
     }
 }
 
-#[test]
 fn latch_relay_vectors() {
     let doc = load("latch_relay", &["encode", "decode"]);
     for case in cases(&doc, "encode") {
@@ -209,7 +207,6 @@ fn latch_relay_vectors() {
     }
 }
 
-#[test]
 fn pixels_vectors() {
     let doc = load("pixels", &["brightness_from_percent", "encode"]);
     for case in cases(&doc, "brightness_from_percent") {

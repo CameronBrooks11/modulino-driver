@@ -16,13 +16,15 @@ pub const WRITE_LEN: usize = LATCH_RELAY.write_len.fixed();
 /// How long to leave the board alone after a command, in ms.
 ///
 /// The firmware handles the command in its main loop with two
-/// `HAL_Delay(50)` calls, each up to 52 ms with the HAL's added tick, and
-/// re-reads the command byte from the I2C buffer after each
+/// `HAL_Delay(50)` calls, each at most 51 ms with the HAL's added tick, and
+/// re-reads the command byte from the I2C buffer five times along the way
 /// (main.c:315-323). Any I2C transfer to the board meanwhile runs in the
 /// I2C interrupt and overwrites that byte: a read stores the strap byte
-/// (main.c:475, 571-580), which is non-zero, so a reset in progress pulses
-/// the set coil. 120 ms covers both delays with margin; the bench confirms
-/// it.
+/// (main.c:476, 571-580), which is non-zero. During a reset, a read in the
+/// first 50 ms pulses the set coil; a later one leaves the reset coil
+/// driven and the status pins reporting "set". A write during the pulse is
+/// half-applied and its own command lost. 120 ms covers the ~102 ms
+/// handler with margin; the bench confirms it.
 pub const SETTLE_MS: u32 = 120;
 
 /// Encode a set (`true`) or reset (`false`).

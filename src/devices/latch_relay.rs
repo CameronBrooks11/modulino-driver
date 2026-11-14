@@ -55,11 +55,13 @@ impl<I2C: I2c> LatchRelay<I2C> {
     ///
     /// Any transfer to this board during the pulse can change which coil
     /// the firmware drives, so nothing else may address it until this
-    /// returns. Other boards on the bus are unaffected.
+    /// returns. Other boards on the bus are unaffected. The wait happens
+    /// even when the write reports an error, since the board may have
+    /// received the frame anyway.
     pub fn set(&mut self, on: bool, delay: &mut impl DelayNs) -> Result<(), Error<I2C::Error>> {
-        self.node.write(&codec::encode(on))?;
+        let sent = self.node.write(&codec::encode(on));
         delay.delay_ms(codec::SETTLE_MS);
-        Ok(())
+        sent
     }
 
     /// Set the relay; see [`LatchRelay::set`].
