@@ -61,7 +61,7 @@ impl From<MovementValues> for (f32, f32, f32) {
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::Movement;
+/// use modulino_driver::Movement;
 ///
 /// let mut movement = Movement::new(i2c)?;
 ///

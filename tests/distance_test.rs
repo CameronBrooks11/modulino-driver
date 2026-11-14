@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::Distance;
+use modulino_driver::Distance;
 
 #[test]
 fn test_distance_logic() {

@@ -13,7 +13,7 @@ use embedded_hal::i2c::I2c;
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::Joystick;
+/// use modulino_driver::Joystick;
 ///
 /// let mut joystick = Joystick::new(i2c)?;
 ///

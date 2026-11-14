@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::Knob;
+use modulino_driver::Knob;
 
 #[test]
 fn test_knob_bug_on_set_normal() {

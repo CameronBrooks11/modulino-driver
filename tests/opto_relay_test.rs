@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::OptoRelay;
+use modulino_driver::OptoRelay;
 
 #[test]
 fn test_opto_relay() {

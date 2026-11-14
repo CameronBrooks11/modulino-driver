@@ -21,7 +21,7 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use modulino::{Pixels, Color};
+//! use modulino_driver::{Pixels, Color};
 //!
 //! // Create a Pixels instance with your I2C bus
 //! let mut pixels = Pixels::new(i2c)?;

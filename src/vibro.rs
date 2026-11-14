@@ -45,7 +45,7 @@ impl From<PowerLevel> for u8 {
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::{Vibro, PowerLevel};
+/// use modulino_driver::{Vibro, PowerLevel};
 ///
 /// let mut vibro = Vibro::new(i2c)?;
 ///

@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::Buttons;
+use modulino_driver::Buttons;
 
 #[test]
 fn test_buttons_and_leds() {

@@ -1,35 +1,43 @@
-# modulino
+# modulino-driver
 
-[![Crates.io](https://img.shields.io/crates/v/modulino.svg)](https://crates.io/crates/modulino)
-[![Documentation](https://docs.rs/modulino/badge.svg)](https://docs.rs/modulino)
-[![License](https://img.shields.io/crates/l/modulino.svg)](LICENSE-MIT)
+A layered, hardware-agnostic `no_std` Rust driver for the Arduino Modulino
+boards, for any host with an `embedded-hal` 1.0 I2C implementation.
 
-A hardware-agnostic, `no_std` Rust driver for Arduino Modulino breakout boards.
+**Status: pre-release.** The crate is being restructured around the node
+protocol the Modulino firmware speaks; [docs/design.md](docs/design.md) has
+the architecture and milestones. Until 0.1.0 the API below is the one
+inherited from modulino-rs 0.3.0 and will change.
 
-## Overview
+## Origin
 
-This crate provides drivers for the Arduino Modulino family of breakout boards, designed to work with any microcontroller that implements the `embedded-hal` 1.0 I2C traits.
+This crate started from [modulino-rs](https://github.com/melastmohican/modulino-rs)
+0.3.0 by Mariusz Jurgielewicz, and keeps its history and its MIT OR
+Apache-2.0 licence.
 
-## Supported Modules
+## Supported modules
 
-| Module | Sensor/IC | Implementation | Default Address |
+| Module | Hardware | Implementation | Default address |
 | :--- | :--- | :--- | :--- |
-| `Buttons` | Custom MCU | **Internal** | 0x3E |
-| `Buzzer` | Custom MCU | **Internal** | 0x1E |
-| `Pixels` | APA102 | **Internal** | 0x36 |
+| `Buttons` | STM32C011 node | **Internal** | 0x3E |
+| `Buzzer` | STM32C011 node | **Internal** | 0x1E |
+| `Pixels` | STM32C011 node, APA102-style LEDs | **Internal** | 0x36 |
 | `Distance` | VL53L4CD | **Internal** | 0x29 |
 | `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
-| `Knob` | Custom MCU | **Internal** | 0x3A/0x3B |
+| `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B |
 | `Thermo` | HS3003 | **External** (`hs3003`) | 0x44 |
-| `Joystick` | Custom MCU | **Internal** | 0x2C |
-| `LatchRelay` | Custom MCU | **Internal** | 0x02 |
-| `Vibro` | Custom MCU | **Internal** | 0x38 |
-| `LedMatrix` | IS31FL3733 | **Internal** | 0x39 |
+| `Joystick` | STM32C011 node | **Internal** | 0x2C |
+| `LatchRelay` | STM32C011 node | **Internal** | 0x02 |
+| `Vibro` | STM32C011 node | **Internal** | 0x38 |
+| `LedMatrix` | STM32C011 node | **Internal** | 0x39 |
 | `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
 | `Light` | LTR-381RGB | **Internal** | 0x53 |
-| `OptoRelay` | Custom MCU | **Internal (Experimental)** | 0x14 |
+| `OptoRelay` | STM32C011 node | **Internal (Experimental)** | 0x14 |
 | `Hub` | TCA9548A | **Internal** | 0x70 |
-| `Motors` | Coprocessor | **Internal (Experimental)** | 0x24 |
+| `Motors` | STM32C011 node | **Internal (Experimental)** | 0x24 |
+
+A node board runs Arduino's `node_modulino_firmware` on an STM32C011 and
+drives its LEDs, buttons or motors itself; the host talks only to the
+STM32.
 
 ## Usage
 
@@ -37,13 +45,13 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-modulino = "0.2"
+modulino-driver = { git = "https://github.com/CameronBrooks11/modulino-driver" }
 ```
 
 ### Example: RGB LEDs
 
 ```rust
-use modulino::{Pixels, Color};
+use modulino_driver::{Pixels, Color};
 
 // Create a Pixels instance with your I2C bus
 let mut pixels = Pixels::new(i2c)?;
@@ -61,7 +69,7 @@ pixels.show()?;
 ### Example: Buttons
 
 ```rust
-use modulino::Buttons;
+use modulino_driver::Buttons;
 
 let mut buttons = Buttons::new(i2c)?;
 
@@ -80,7 +88,7 @@ loop {
 ### Example: Buzzer
 
 ```rust
-use modulino::{Buzzer, Note};
+use modulino_driver::{Buzzer, Note};
 
 let mut buzzer = Buzzer::new(i2c)?;
 
@@ -97,7 +105,7 @@ buzzer.no_tone()?;
 ### Example: Temperature & Humidity
 
 ```rust
-use modulino::Thermo;
+use modulino_driver::Thermo;
 
 let mut thermo = Thermo::new(i2c);
 
@@ -110,7 +118,7 @@ println!("Humidity: {:.1}%", measurement.humidity);
 ### Example: Distance Sensor
 
 ```rust
-use modulino::Distance;
+use modulino_driver::Distance;
 
 let mut distance = Distance::new(i2c)?;
 
@@ -125,7 +133,7 @@ println!("Distance: {} mm", mm);
 ### Example: Rotary Encoder
 
 ```rust
-use modulino::Knob;
+use modulino_driver::Knob;
 
 let mut knob = Knob::new(i2c)?;
 
@@ -142,7 +150,7 @@ loop {
 ### Example: Joystick
 
 ```rust
-use modulino::Joystick;
+use modulino_driver::Joystick;
 
 let mut joystick = Joystick::new(i2c)?;
 
@@ -162,7 +170,7 @@ loop {
 ### Example: Vibration Motor
 
 ```rust
-use modulino::{Vibro, PowerLevel};
+use modulino_driver::{Vibro, PowerLevel};
 
 let mut vibro = Vibro::new(i2c)?;
 
@@ -176,7 +184,7 @@ vibro.on_with_power(1000, 60)?;
 ### Example: Relay Control
 
 ```rust
-use modulino::LatchRelay;
+use modulino_driver::LatchRelay;
 
 let mut relay = LatchRelay::new(i2c)?;
 
@@ -195,7 +203,7 @@ relay.off()?;
 ### Example: IMU (Accelerometer/Gyroscope)
 
 ```rust
-use modulino::Movement;
+use modulino_driver::Movement;
 
 let mut movement = Movement::new(i2c)?;
 
@@ -211,7 +219,7 @@ println!("Gyro: x={:.2}°/s, y={:.2}°/s, z={:.2}°/s", gyro.x, gyro.y, gyro.z);
 ### Example: LED Matrix
 
 ```rust
-use modulino::LedMatrix;
+use modulino_driver::LedMatrix;
 
 let mut matrix = LedMatrix::new(i2c);
 matrix.init()?;
@@ -226,7 +234,7 @@ matrix.show()?;
 ### Example: Pressure & Temperature
 
 ```rust
-use modulino::Pressure;
+use modulino_driver::Pressure;
 
 let mut pressure = Pressure::new(i2c);
 
@@ -242,7 +250,7 @@ println!("Temperature: {:.1}°C", temp);
 ### Example: Color & Light Sensor
 
 ```rust
-use modulino::Light;
+use modulino_driver::Light;
 
 let mut light = Light::new(i2c);
 light.init()?;
@@ -260,7 +268,7 @@ println!("Red: {}, Green: {}, Blue: {}, IR: {}",
 ### Example: Opto Relay Control
 
 ```rust
-use modulino::OptoRelay;
+use modulino_driver::OptoRelay;
 
 let mut relay = OptoRelay::new(i2c)?;
 
@@ -277,7 +285,7 @@ relay.off()?;
 ### Example: Motors Control (Experimental)
 
 ```rust
-use modulino::{Motors, DecayMode};
+use modulino_driver::{Motors, DecayMode};
 
 let mut motors = Motors::new(i2c)?;
 
@@ -296,7 +304,7 @@ motors.move_stepper_rpm(200, 60.0, 0)?;
 ### Example: I2C Hub (Multiplexer)
 
 ```rust
-use modulino::Hub;
+use modulino_driver::Hub;
 
 let mut hub = Hub::new(i2c);
 
@@ -316,7 +324,7 @@ hub.clear()?;
 
 ```toml
 [dependencies]
-modulino = { version = "0.2", features = ["defmt"] }
+modulino-driver = { git = "https://github.com/CameronBrooks11/modulino-driver", features = ["defmt"] }
 ```
 
 ## Hardware Requirements
@@ -328,7 +336,7 @@ All Modulino devices communicate over I2C at 100kHz. They use the Qwiic/STEMMA Q
 Some modules can have their address changed. You can specify a custom address when creating a driver:
 
 ```rust
-use modulino::{Buttons, addresses};
+use modulino_driver::{Buttons, addresses};
 
 // Use default address
 let buttons = Buttons::new(i2c)?;

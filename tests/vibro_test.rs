@@ -1,5 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino::{PowerLevel, Vibro};
+use modulino_driver::{PowerLevel, Vibro};
 
 #[test]
 fn test_vibro_control() {

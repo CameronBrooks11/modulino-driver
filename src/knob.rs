@@ -10,7 +10,7 @@ use embedded_hal::i2c::I2c;
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::Knob;
+/// use modulino_driver::Knob;
 ///
 /// let mut knob = Knob::new(i2c)?;
 ///

@@ -60,7 +60,7 @@ impl From<Measurement> for ThermoMeasurement {
 /// # Example
 ///
 /// ```rust,ignore
-/// use modulino::Thermo;
+/// use modulino_driver::Thermo;
 ///
 /// let mut thermo = Thermo::new(i2c);
 ///
