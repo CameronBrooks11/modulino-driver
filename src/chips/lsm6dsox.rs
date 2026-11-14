@@ -1,10 +1,13 @@
 //! LSM6DSOX accelerometer and gyroscope (Modulino Movement).
 //!
-//! Registers (ST LSM6DSOX datasheet): `WHO_AM_I` 0x0F = 0x6C, `CTRL1_XL`
-//! 0x10, `CTRL2_G` 0x11, `CTRL3_C` 0x12 (`BDU` bit 6, `IF_INC` bit 2,
-//! `SW_RESET` bit 0), `STATUS_REG` 0x1E (`XLDA` bit 0, `GDA` bit 1),
-//! `OUTX_L_G` 0x22 and `OUTX_L_A` 0x28, each three little-endian i16.
-//! The module's SA0 strap selects 0x6A or 0x6B.
+//! Registers (ST LSM6DSOX datasheet, as I know it): `WHO_AM_I` 0x0F =
+//! 0x6C, `CTRL1_XL` 0x10, `CTRL2_G` 0x11, `CTRL3_C` 0x12 (`BDU` bit 6,
+//! `IF_INC` bit 2, `SW_RESET` bit 0), `STATUS_REG` 0x1E (`XLDA` bit 0,
+//! `GDA` bit 1), `OUTX_L_G` 0x22 and `OUTX_L_A` 0x28, each three
+//! little-endian i16. The module's SA0 strap selects 0x6A or 0x6B.
+//!
+//! The reset follows ST's application note as I know it: gyroscope to
+//! power-down, then `SW_RESET`, then wait for the bit to clear.
 
 use embedded_hal::i2c::I2c;
 
@@ -21,6 +24,8 @@ const OUTX_L_G: u8 = 0x22;
 const OUTX_L_A: u8 = 0x28;
 
 const SW_RESET: u8 = 0x01;
+/// Gyroscope power-down, before a software reset.
+const CTRL2_G_OFF: u8 = 0x00;
 /// `BDU` and `IF_INC`: outputs update as a unit, reads auto-increment.
 const CTRL3_C_RUN: u8 = 0x44;
 /// 104 Hz, ±2 g.
@@ -90,14 +95,14 @@ impl<I2C: I2c> Lsm6dsox<I2C> {
     }
 
     /// Check `WHO_AM_I`. Built with [`Lsm6dsox::new`], this tries 0x6A and
-    /// then 0x6B and keeps the address that answers.
+    /// then 0x6B and keeps the address that answers. If neither does, the
+    /// error reported is the most telling one: something with the wrong
+    /// identity, or a bus error other than a NACK, before a NACK.
     pub fn verify(&mut self) -> Result<(), Error<I2C::Error>> {
         if !self.fallback {
             return super::verify(&mut self.regs.i2c, self.regs.addr, ChipKind::Lsm6dsox);
         }
-        let mut last = Error::WrongChip {
-            expected: ChipKind::Lsm6dsox,
-        };
+        let mut best: Option<Error<I2C::Error>> = None;
         for raw in ADDRESSES {
             let addr = Address::new(raw).expect("strap addresses are valid");
             match super::verify(&mut self.regs.i2c, addr, ChipKind::Lsm6dsox) {
@@ -106,16 +111,22 @@ impl<I2C: I2c> Lsm6dsox<I2C> {
                     self.fallback = false;
                     return Ok(());
                 }
-                Err(e) => last = e,
+                // Keep the first error unless it was only a NACK.
+                Err(e) => {
+                    if best.as_ref().map_or(true, super::is_nack) {
+                        best = Some(e);
+                    }
+                }
             }
         }
-        Err(last)
+        Err(best.expect("ADDRESSES is not empty"))
     }
 
     /// Verify, reset, and configure both sensors at 104 Hz, ±2 g and
     /// ±250 dps with block data update.
     pub fn init(&mut self) -> Result<(), Error<I2C::Error>> {
         self.verify()?;
+        self.regs.write(CTRL2_G, CTRL2_G_OFF)?;
         self.regs.write(CTRL3_C, SW_RESET)?;
         self.regs.wait_clear(CTRL3_C, SW_RESET)?;
         self.regs.write(CTRL3_C, CTRL3_C_RUN)?;
@@ -123,9 +134,14 @@ impl<I2C: I2c> Lsm6dsox<I2C> {
         self.regs.write(CTRL2_G, CTRL2_G_RUN)
     }
 
-    /// Whether new acceleration or rotation data is ready.
-    pub fn data_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
-        Ok(self.regs.read(STATUS_REG)? & 0x03 != 0)
+    /// Whether a new acceleration sample is ready (`XLDA`).
+    pub fn acceleration_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
+        Ok(self.regs.read(STATUS_REG)? & 0x01 != 0)
+    }
+
+    /// Whether a new angular velocity sample is ready (`GDA`).
+    pub fn angular_velocity_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
+        Ok(self.regs.read(STATUS_REG)? & 0x02 != 0)
     }
 
     /// Acceleration in g.

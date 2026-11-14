@@ -4,6 +4,7 @@
 mod support;
 
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as T};
+use modulino_driver::chips::{Lps22hb, Lsm6dsox};
 use modulino_driver::{Address, Axes, ChipKind, Error, Movement, Pressure};
 use support::{FakeBus, FakeChip, Nack};
 
@@ -19,19 +20,22 @@ fn movement_init_and_read_sequence() {
     let a = 0x6A;
     let expectations = [
         T::write_read(a, vec![0x0F], vec![0x6C]),
+        T::write(a, vec![0x11, 0x00]),
         T::write(a, vec![0x12, 0x01]),
         T::write_read(a, vec![0x12], vec![0x01]),
         T::write_read(a, vec![0x12], vec![0x00]),
         T::write(a, vec![0x12, 0x44]),
         T::write(a, vec![0x10, 0x40]),
         T::write(a, vec![0x11, 0x40]),
-        T::write_read(a, vec![0x1E], vec![0x03]),
+        T::write_read(a, vec![0x1E], vec![0x01]),
+        T::write_read(a, vec![0x1E], vec![0x01]),
         T::write_read(a, vec![0x28], vec![0x00, 0x00, 0x00, 0x00, 0x09, 0x40]),
         T::write_read(a, vec![0x22], vec![0xE8, 0x03, 0x18, 0xFC, 0x00, 0x00]),
     ];
     let mut movement = Movement::new(I2cMock::new(&expectations));
     movement.init().unwrap();
-    assert!(movement.data_ready().unwrap());
+    assert!(movement.acceleration_ready().unwrap());
+    assert!(!movement.angular_velocity_ready().unwrap());
 
     let g = movement.acceleration().unwrap();
     assert_eq!((g.x, g.y), (0.0, 0.0));
@@ -71,7 +75,8 @@ fn wrong_chip_and_missing_chip_are_told_apart() {
     assert_eq!(
         pressure.verify(),
         Err(Error::WrongChip {
-            expected: ChipKind::Lps22hb
+            expected: ChipKind::Lps22hb,
+            got: Some(0xB3)
         })
     );
     let mut pressure = Pressure::new(FakeBus::default());
@@ -91,11 +96,12 @@ fn pressure_init_and_read_sequence() {
     let a = 0x5C;
     let expectations = [
         T::write_read(a, vec![0x0F], vec![0xB1]),
-        T::write(a, vec![0x11, 0x04]),
+        T::write(a, vec![0x11, 0x14]),
         T::write_read(a, vec![0x11], vec![0x14]),
         T::write_read(a, vec![0x11], vec![0x10]),
         T::write(a, vec![0x10, 0x22]),
-        T::write_read(a, vec![0x27], vec![0x01]),
+        T::write_read(a, vec![0x27], vec![0x02]),
+        T::write_read(a, vec![0x27], vec![0x02]),
         T::write_read(a, vec![0x28], vec![0x00, 0x00, 0x3F]),
         T::write_read(a, vec![0x28], vec![0xFF, 0xFF, 0xFF]),
         T::write_read(a, vec![0x2B], vec![0xC4, 0x09]),
@@ -103,7 +109,8 @@ fn pressure_init_and_read_sequence() {
     ];
     let mut pressure = Pressure::new(I2cMock::new(&expectations));
     pressure.init().unwrap();
-    assert!(pressure.data_ready().unwrap());
+    assert!(!pressure.pressure_ready().unwrap());
+    assert!(pressure.temperature_ready().unwrap());
     assert_eq!(pressure.pressure().unwrap(), 0x3F0000 as f32 / 4096.0);
     assert_eq!(pressure.pressure().unwrap(), -1.0 / 4096.0, "sign-extended");
     assert_eq!(pressure.temperature().unwrap(), 25.0);
@@ -122,4 +129,27 @@ fn pressure_reset_that_never_clears_times_out() {
 fn constructors_do_no_io() {
     assert_eq!(Movement::new(FakeBus::default()).release().transactions, 0);
     assert_eq!(Pressure::new(FakeBus::default()).release().transactions, 0);
+}
+
+#[test]
+fn movement_fallback_reports_the_wrong_chip_over_a_nack() {
+    // Something with WHO_AM_I 0x00 at 0x6A, nothing at 0x6B.
+    let bus = chips(vec![FakeChip::new(0x6A, 1)]);
+    let mut movement = Movement::new(bus);
+    assert_eq!(
+        movement.verify(),
+        Err(Error::WrongChip {
+            expected: ChipKind::Lsm6dsox,
+            got: Some(0x00)
+        })
+    );
+    // Nothing anywhere: the NACK.
+    let mut movement = Movement::new(FakeBus::default());
+    assert_eq!(movement.verify(), Err(Error::I2c(Nack(0x6B))));
+}
+
+#[test]
+fn chip_types_are_reachable_under_chips() {
+    let _: Lsm6dsox<FakeBus> = Movement::new(FakeBus::default());
+    let _: Lps22hb<FakeBus> = Pressure::new(FakeBus::default());
 }

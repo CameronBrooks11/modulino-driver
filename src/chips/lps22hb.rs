@@ -1,6 +1,6 @@
 //! LPS22HB barometric pressure sensor (Modulino Pressure).
 //!
-//! Registers (ST LPS22HB datasheet): `WHO_AM_I` 0x0F = 0xB1, `CTRL_REG1`
+//! Registers (ST LPS22HB datasheet, as I know it): `WHO_AM_I` 0x0F = 0xB1, `CTRL_REG1`
 //! 0x10 (`ODR` bits 6-4, `BDU` bit 1), `CTRL_REG2` 0x11 (`IF_ADD_INC`
 //! bit 4, set at reset; `SWRESET` bit 2), `STATUS` 0x27 (`P_DA` bit 0,
 //! `T_DA` bit 1), `PRESS_OUT_XL` 0x28 (24-bit two's complement, 4096 LSB
@@ -21,6 +21,8 @@ const PRESS_OUT_XL: u8 = 0x28;
 const TEMP_OUT_L: u8 = 0x2B;
 
 const SWRESET: u8 = 0x04;
+/// `IF_ADD_INC`, kept set in the reset write.
+const IF_ADD_INC: u8 = 0x10;
 /// 10 Hz output data rate, block data update.
 const CTRL_REG1_RUN: u8 = 0x22;
 
@@ -65,14 +67,19 @@ impl<I2C: I2c> Lps22hb<I2C> {
     /// Verify, reset, and run at 10 Hz with block data update.
     pub fn init(&mut self) -> Result<(), Error<I2C::Error>> {
         self.verify()?;
-        self.regs.write(CTRL_REG2, SWRESET)?;
+        self.regs.write(CTRL_REG2, IF_ADD_INC | SWRESET)?;
         self.regs.wait_clear(CTRL_REG2, SWRESET)?;
         self.regs.write(CTRL_REG1, CTRL_REG1_RUN)
     }
 
-    /// Whether a new pressure or temperature sample is ready.
-    pub fn data_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
-        Ok(self.regs.read(STATUS)? & 0x03 != 0)
+    /// Whether a new pressure sample is ready (`P_DA`).
+    pub fn pressure_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
+        Ok(self.regs.read(STATUS)? & 0x01 != 0)
+    }
+
+    /// Whether a new temperature sample is ready (`T_DA`).
+    pub fn temperature_ready(&mut self) -> Result<bool, Error<I2C::Error>> {
+        Ok(self.regs.read(STATUS)? & 0x02 != 0)
     }
 
     /// Pressure in hPa.

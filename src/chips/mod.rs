@@ -9,6 +9,9 @@
 pub mod lps22hb;
 pub mod lsm6dsox;
 
+pub use lps22hb::Lps22hb;
+pub use lsm6dsox::{Axes, Lsm6dsox};
+
 use embedded_hal::i2c::{ErrorKind, I2c};
 
 use crate::addr::Address;
@@ -24,6 +27,11 @@ pub(crate) fn acked<E: embedded_hal::i2c::Error>(result: Result<(), E>) -> Resul
     }
 }
 
+/// Whether `e` is a bus NACK: nothing answered.
+pub(crate) fn is_nack<E: embedded_hal::i2c::Error>(e: &Error<E>) -> bool {
+    matches!(e, Error::I2c(b) if matches!(b.kind(), ErrorKind::NoAcknowledge(_)))
+}
+
 /// How many times the SHT3x status read is retried on a NACK. A NACKed read
 /// is about 11 clock periods, so 200 tries span roughly 2 ms at 1 MHz and
 /// more at slower clocks (an estimate, not a measurement), against the
@@ -31,44 +39,96 @@ pub(crate) fn acked<E: embedded_hal::i2c::Error>(result: Result<(), E>) -> Resul
 /// nothing unless a device at the SHT31 address accepted the command.
 const SHT3X_READ_TRIES: usize = 200;
 
-/// Whether the chip at `raw` passes identity check `id`. A NACK is `false`;
-/// any other bus error is returned.
-pub(crate) fn has_id<I: I2c>(bus: &mut I, raw: u8, id: ChipId) -> Result<bool, Error<I::Error>> {
+/// What an identity check found, when the bus itself did not fail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IdCheck {
+    /// The identity matched.
+    Match,
+    /// Something answered with another identity: the byte read, or `None`
+    /// for an SHT3x status whose CRC did not match.
+    Mismatch(Option<u8>),
+    /// An SHT3x accepted the command but never released its status.
+    NoReply,
+}
+
+/// Run identity check `id` against the chip at `raw`. Every bus error, a
+/// NACK included, is returned; callers decide what a NACK means.
+/// `ChipId::None` is a 1-byte read that matches whatever answers.
+pub(crate) fn check_id<I: I2c>(
+    bus: &mut I,
+    raw: u8,
+    id: ChipId,
+) -> Result<IdCheck, Error<I::Error>> {
+    let compare = |byte: u8, value: u8, mask: u8| {
+        if byte & mask == value {
+            IdCheck::Match
+        } else {
+            IdCheck::Mismatch(Some(byte))
+        }
+    };
     let mut byte = [0u8; 1];
     match id {
         ChipId::Register8 {
             register,
             value,
             mask,
-        } => Ok(acked(bus.write_read(raw, &[register], &mut byte))? && byte[0] & mask == value),
+        } => {
+            bus.write_read(raw, &[register], &mut byte)
+                .map_err(Error::I2c)?;
+            Ok(compare(byte[0], value, mask))
+        }
         ChipId::Register16 {
             register,
             value,
             mask,
-        } => Ok(
-            acked(bus.write_read(raw, &register.to_be_bytes(), &mut byte))?
-                && byte[0] & mask == value,
-        ),
+        } => {
+            bus.write_read(raw, &register.to_be_bytes(), &mut byte)
+                .map_err(Error::I2c)?;
+            Ok(compare(byte[0], value, mask))
+        }
         ChipId::Sht3xStatus { command } => {
-            if !acked(bus.write(raw, &command.to_be_bytes()))? {
-                return Ok(false);
-            }
+            bus.write(raw, &command.to_be_bytes()).map_err(Error::I2c)?;
             let mut status = [0u8; 3];
             for _ in 0..SHT3X_READ_TRIES {
                 if acked(bus.read(raw, &mut status))? {
-                    return Ok(sensirion_crc8(&status[..2]) == status[2]);
+                    return Ok(if sensirion_crc8(&status[..2]) == status[2] {
+                        IdCheck::Match
+                    } else {
+                        IdCheck::Mismatch(None)
+                    });
                 }
             }
-            Ok(false)
+            Ok(IdCheck::NoReply)
         }
-        ChipId::None => Ok(false),
+        ChipId::None => {
+            bus.read(raw, &mut byte).map_err(Error::I2c)?;
+            Ok(IdCheck::Match)
+        }
     }
 }
 
-/// Check that `kind` answers at `addr`. Bus errors, a NACK included, are
-/// returned as they are: nothing answered. Something that answers but fails
-/// the identity check is [`Error::WrongChip`]. A chip with no readable
-/// identity passes if it acknowledges a 1-byte read.
+/// Scan's view of [`check_id`]: whether the chip at `raw` proves identity
+/// `id`. A NACK is `false`, and a chip with no identity never proves one;
+/// any other bus error is returned.
+pub(crate) fn has_id<I: I2c>(bus: &mut I, raw: u8, id: ChipId) -> Result<bool, Error<I::Error>> {
+    if id == ChipId::None {
+        return Ok(false);
+    }
+    match check_id(bus, raw, id) {
+        Ok(found) => Ok(found == IdCheck::Match),
+        Err(Error::I2c(e)) => acked(Err(e)),
+        Err(e) => Err(e),
+    }
+}
+
+/// A driver's view of [`check_id`]: check that `kind` answers at `addr`.
+///
+/// - Every bus error, a NACK included, is returned as it is: nothing (or
+///   something broken) answered.
+/// - Something that answers with another identity is
+///   [`Error::WrongChip`], with the byte it sent where there is one.
+/// - An SHT3x that never releases its status is [`Error::Timeout`].
+/// - A chip with no readable identity passes if it acknowledges a read.
 pub(crate) fn verify<I: I2c>(
     bus: &mut I,
     addr: Address,
@@ -78,57 +138,20 @@ pub(crate) fn verify<I: I2c>(
         .iter()
         .find(|c| c.kind == kind)
         .expect("every ChipKind has a spec row");
-    let raw = addr.get();
-    let mut byte = [0u8; 1];
-    let matches = match spec.id {
-        ChipId::Register8 {
-            register,
-            value,
-            mask,
-        } => {
-            bus.write_read(raw, &[register], &mut byte)
-                .map_err(Error::I2c)?;
-            byte[0] & mask == value
-        }
-        ChipId::Register16 {
-            register,
-            value,
-            mask,
-        } => {
-            bus.write_read(raw, &register.to_be_bytes(), &mut byte)
-                .map_err(Error::I2c)?;
-            byte[0] & mask == value
-        }
-        ChipId::Sht3xStatus { command } => {
-            bus.write(raw, &command.to_be_bytes()).map_err(Error::I2c)?;
-            let mut status = [0u8; 3];
-            let mut answered = false;
-            for _ in 0..SHT3X_READ_TRIES {
-                if acked(bus.read(raw, &mut status))? {
-                    answered = true;
-                    break;
-                }
-            }
-            if !answered {
-                return Err(Error::Timeout);
-            }
-            sensirion_crc8(&status[..2]) == status[2]
-        }
-        ChipId::None => {
-            bus.read(raw, &mut byte).map_err(Error::I2c)?;
-            true
-        }
-    };
-    if matches {
-        Ok(())
-    } else {
-        Err(Error::WrongChip { expected: kind })
+    match check_id(bus, addr.get(), spec.id)? {
+        IdCheck::Match => Ok(()),
+        IdCheck::Mismatch(got) => Err(Error::WrongChip {
+            expected: kind,
+            got,
+        }),
+        IdCheck::NoReply => Err(Error::Timeout),
     }
 }
 
 /// How many register reads a reset poll makes before giving up. Each read
-/// is a full I2C transaction (about 0.2 ms at 100 kHz, 50 us at 400 kHz),
-/// so this allows several milliseconds, well past the chips' reset times.
+/// is a full register transaction of about 38 clocks (roughly 0.4 ms at
+/// 100 kHz, 0.1 ms at 400 kHz; an estimate), so this allows about 4-38 ms,
+/// well past the chips' reset times.
 pub(crate) const RESET_POLLS: usize = 100;
 
 /// An 8-bit-register chip at one address.

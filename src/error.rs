@@ -43,6 +43,8 @@ pub enum Error<E> {
     WrongChip {
         /// The chip expected there
         expected: ChipKind,
+        /// The identity byte read, if the check reads one
+        got: Option<u8>,
     },
     /// A data frame starts with a firmware command prefix (`CF` or `DIE`)
     /// and would be executed as that command; nothing was sent.
@@ -79,9 +81,10 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
                     got, expected
                 )
             }
-            Error::WrongChip { expected } => {
-                write!(f, "the chip at this address is not a {:?}", expected)
-            }
+            Error::WrongChip { expected, got } => match got {
+                Some(byte) => write!(f, "expected a {:?}, read identity {:#04x}", expected, byte),
+                None => write!(f, "expected a {:?}, identity check failed", expected),
+            },
             Error::ReservedPrefix => write!(f, "frame starts with a firmware command prefix"),
         }
     }
