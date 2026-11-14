@@ -6,7 +6,6 @@ authors = ["Mariusz Jurgielewicz <mordor@mail.com>"]
 description = "A layered, hardware-agnostic no_std driver for Arduino Modulino boards"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/CameronBrooks11/modulino-driver"
-documentation = "https://docs.rs/modulino-driver"
 readme = "README.md"
 keywords = ["embedded", "i2c", "arduino", "modulino", "no_std"]
 categories = ["embedded", "no-std", "hardware-support"]

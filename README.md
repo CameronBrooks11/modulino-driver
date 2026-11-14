@@ -21,10 +21,10 @@ Apache-2.0 licence.
 | `Buttons` | STM32C011 node | **Internal** | 0x3E |
 | `Buzzer` | STM32C011 node | **Internal** | 0x1E |
 | `Pixels` | STM32C011 node, APA102-style LEDs | **Internal** | 0x36 |
-| `Distance` | VL53L4CD | **Internal** | 0x29 |
+| `Distance` | VL53L4CD (VL53L4ED variant not yet supported) | **Internal** | 0x29 |
 | `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
 | `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B |
-| `Thermo` | HS3003 | **External** (`hs3003`) | 0x44 |
+| `Thermo` | HS3003 (SHT31 variant at 0x45 not yet supported) | **External** (`hs3003`) | 0x44 |
 | `Joystick` | STM32C011 node | **Internal** | 0x2C |
 | `LatchRelay` | STM32C011 node | **Internal** | 0x02 |
 | `Vibro` | STM32C011 node | **Internal** | 0x38 |
@@ -37,7 +37,10 @@ Apache-2.0 licence.
 
 A node board runs Arduino's `node_modulino_firmware` on an STM32C011 and
 drives its LEDs, buttons or motors itself; the host talks only to the
-STM32.
+STM32. Its default address is its strap byte shifted right by one
+(`Core/Src/main.c:32-42` at `7d578e0`). Arduino's library also handles the
+SHT31 and VL53L4ED variants (`Arduino_Modulino` `src/Modulino.h:614-627`,
+`885-900` at `24d08a9`).
 
 ## Usage
 

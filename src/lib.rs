@@ -1,6 +1,6 @@
-//! # Modulino
+//! # modulino-driver
 //!
-//! A hardware-agnostic, `no_std` Rust driver for Arduino Modulino breakout boards.
+//! A layered, hardware-agnostic `no_std` driver for Arduino Modulino boards.
 //!
 //! This crate provides drivers for the following Modulino devices:
 //!
