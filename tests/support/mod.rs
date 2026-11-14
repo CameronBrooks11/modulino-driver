@@ -139,15 +139,63 @@ impl i2c::Error for Nack {
     }
 }
 
-/// A bus with node boards on it.
+/// A bus with node boards and hubs on it.
 #[derive(Debug, Default)]
 pub struct FakeBus {
     /// Boards on the bus.
     pub nodes: Vec<FakeNode>,
+    /// Hubs on the bus; their ports carry further buses.
+    pub hubs: Vec<FakeHub>,
     /// Transactions attempted, answered or not.
     pub transactions: usize,
     /// Shared with a `FakeDelay` to record the order of bus and delay.
     pub log: Option<Log>,
+}
+
+/// A TCA9548A: one control byte at its address, bit `n` connecting port
+/// `n` to the upstream bus. A write sets the byte (the last byte written
+/// wins); a read returns it. It does not answer general call.
+#[derive(Debug)]
+pub struct FakeHub {
+    /// 7-bit address, 0x70-0x77.
+    pub addr: u8,
+    /// Control byte; 0 at power-up.
+    pub control: u8,
+    /// The eight downstream buses.
+    pub ports: Vec<FakeBus>,
+    /// Every control byte written, oldest first.
+    pub writes: Vec<u8>,
+}
+
+impl FakeHub {
+    /// A hub at `addr` with empty ports.
+    pub fn new(addr: u8) -> Self {
+        Self {
+            addr,
+            control: 0,
+            ports: (0..8).map(|_| FakeBus::default()).collect(),
+            writes: Vec::new(),
+        }
+    }
+
+    /// The same hub with `nodes` on `port`.
+    pub fn with_nodes(mut self, port: usize, nodes: Vec<FakeNode>) -> Self {
+        self.ports[port].nodes.extend(nodes);
+        self
+    }
+
+    /// The same hub with `hub` on `port`.
+    pub fn with_hub(mut self, port: usize, hub: FakeHub) -> Self {
+        self.ports[port].hubs.push(hub);
+        self
+    }
+}
+
+/// One addressable thing a transaction reached.
+enum Target<'a> {
+    Node(&'a mut FakeNode),
+    /// A hub's control byte and its write log.
+    Hub(&'a mut u8, &'a mut Vec<u8>),
 }
 
 /// One bus transaction or delay, in the order they happened.
@@ -167,17 +215,76 @@ impl FakeBus {
     pub fn new(nodes: Vec<FakeNode>) -> Self {
         Self {
             nodes,
-            transactions: 0,
-            log: None,
+            ..Default::default()
         }
     }
 
-    /// The board currently at `addr`.
+    /// A bus with these hubs and no boards of its own.
+    pub fn with_hubs(hubs: Vec<FakeHub>) -> Self {
+        Self {
+            hubs,
+            ..Default::default()
+        }
+    }
+
+    /// The board at `addr`, searching every port whether connected or not.
     pub fn node(&self, addr: u8) -> &FakeNode {
-        self.nodes
-            .iter()
-            .find(|n| n.addr == addr)
+        self.find_node(addr)
             .unwrap_or_else(|| panic!("no node at {addr:#04x}"))
+    }
+
+    fn find_node(&self, addr: u8) -> Option<&FakeNode> {
+        self.nodes.iter().find(|n| n.addr == addr).or_else(|| {
+            self.hubs
+                .iter()
+                .flat_map(|h| h.ports.iter())
+                .find_map(|p| p.find_node(addr))
+        })
+    }
+
+    /// The hub at `addr`, searching every port.
+    pub fn hub(&self, addr: u8) -> &FakeHub {
+        self.find_hub(addr)
+            .unwrap_or_else(|| panic!("no hub at {addr:#04x}"))
+    }
+
+    fn find_hub(&self, addr: u8) -> Option<&FakeHub> {
+        self.hubs.iter().find(|h| h.addr == addr).or_else(|| {
+            self.hubs
+                .iter()
+                .flat_map(|h| h.ports.iter())
+                .find_map(|p| p.find_hub(addr))
+        })
+    }
+
+    /// Everything that answers `addr` from here: this bus's boards and
+    /// hubs, and whatever is on the hubs' connected ports. Address 0
+    /// reaches every board but no hub.
+    fn targets<'a>(&'a mut self, addr: u8, out: &mut Vec<Target<'a>>) {
+        for node in self.nodes.iter_mut() {
+            if addr == 0 || node.addr == addr {
+                out.push(Target::Node(node));
+            }
+        }
+        for hub in self.hubs.iter_mut() {
+            let (hub_addr, control) = (hub.addr, hub.control);
+            // The hub answers its own address while its connected ports
+            // carry the same transaction: the segments are joined.
+            let FakeHub {
+                ports,
+                control: ctrl,
+                writes,
+                ..
+            } = hub;
+            if addr != 0 && hub_addr == addr {
+                out.push(Target::Hub(ctrl, writes));
+            }
+            for (i, port) in ports.iter_mut().enumerate() {
+                if control >> i & 1 == 1 {
+                    port.targets(addr, out);
+                }
+            }
+        }
     }
 }
 
@@ -191,25 +298,41 @@ impl I2c for FakeBus {
         if let Some(log) = &self.log {
             log.borrow_mut().push(Event::Bus(address));
         }
-        if address == 0 {
-            // General call: every node processes writes; nothing reads.
-            for op in ops.iter_mut() {
-                match op {
-                    Operation::Write(data) => self.nodes.iter_mut().for_each(|n| n.write(data)),
-                    Operation::Read(_) => return Err(Nack(0)),
-                }
-            }
-            return Ok(());
+        let mut targets = Vec::new();
+        self.targets(address, &mut targets);
+        if targets.is_empty()
+            || (address == 0 && ops.iter().any(|op| matches!(op, Operation::Read(_))))
+        {
+            return Err(Nack(address));
         }
-        let node = self
-            .nodes
-            .iter_mut()
-            .find(|n| n.addr == address)
-            .ok_or(Nack(address))?;
         for op in ops.iter_mut() {
             match op {
-                Operation::Read(buf) => node.read(buf),
-                Operation::Write(data) => node.write(data),
+                Operation::Write(data) => {
+                    for t in targets.iter_mut() {
+                        match t {
+                            Target::Node(n) => n.write(data),
+                            Target::Hub(control, writes) => {
+                                if let Some(&last) = data.last() {
+                                    **control = last;
+                                    writes.push(last);
+                                }
+                            }
+                        }
+                    }
+                }
+                Operation::Read(buf) => {
+                    // Open-drain: with several devices answering, a bit
+                    // reads 1 only if every device sends 1.
+                    buf.fill(0xFF);
+                    let mut mine = vec![0u8; buf.len()];
+                    for t in targets.iter_mut() {
+                        match t {
+                            Target::Node(n) => n.read(&mut mine),
+                            Target::Hub(control, _) => mine.fill(**control),
+                        }
+                        buf.iter_mut().zip(&mine).for_each(|(b, m)| *b &= m);
+                    }
+                }
             }
         }
         Ok(())

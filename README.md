@@ -312,18 +312,23 @@ let status = motors.status()?;
 ### Example: I2C Hub (Multiplexer)
 
 ```rust
-use modulino_driver::Hub;
+use core::cell::RefCell;
+use modulino_driver::{Address, Buttons, Hub};
 
-let mut hub = Hub::new(i2c);
+// The hub borrows the bus per transaction, so wrap it in a RefCell
+let bus = RefCell::new(i2c);
+let hub = Hub::new(&bus); // 0x70; Hub::with_address for 0x71-0x77
 
-// Select port 2 (enables I2C channel 2)
-hub.select(2)?;
+// Each port is an I2C bus: it selects the port, runs the transaction and
+// deselects again, even on error. Two identical boards can sit on two ports.
+let mut left = Buttons::new(hub.port(0).unwrap());
+let mut right = Buttons::new(hub.port(1).unwrap());
+left.set_leds(true, false, false)?;
+right.set_leds(false, false, true)?;
 
-// Now you can communicate with a Modulino device on channel 2
-// ...
-
-// Clear selection (disables all ports)
-hub.clear()?;
+// A hub behind a hub: wrap the outer port in a RefCell
+let outer = RefCell::new(hub.port(7).unwrap());
+let inner = Hub::with_address(&outer, Address::new(0x71).unwrap()).unwrap();
 ```
 
 ## Features
