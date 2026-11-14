@@ -18,6 +18,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   becomes `with_address(i2c, Address)`, and `address()` returns
   `Address`. `ButtonState` moves to `codec::buttons`.
 - `Error` is `#[non_exhaustive]`.
+- `Buzzer`, `Vibro`, `Knob`, `Pixels`, `Joystick`, `OptoRelay` and
+  `LatchRelay` are rebuilt on the node core with pure codecs, in the same
+  shape as `Buttons`: `new`/`with_address(Address)` do no I/O,
+  `verify()`, and reads return values or errors, never cached state.
+  - `Buzzer::tone`/`play_note` and `Vibro::on`/`on_with_power` take `u32`
+    durations (and `tone` a `u32` frequency). `play_note(Note::Rest, _)`
+    sends the stop frame. A tone with
+    duration 0 plays until the next call; `tone(0, _)`, which 0.3 sent as
+    silence, is `OutOfRange` (use `no_tone`), as is anything above
+    5 898 150 Hz. `Vibro::on` refuses a duration of 0, which the firmware
+    stops at once.
+  - `Knob::set_position` keeps the offset on the host and never writes
+    the board; `read()` returns `KnobState`.
+  - `Pixels::set`/`set_all` replace `set_color`/`set_all_color`, and the
+    setters no longer return `&mut Self` for chaining.
+  - `Joystick::read()` returns `JoystickState` centred on zero (raw 0 now
+    gives 127 rather than overflowing); `read_raw()` gives the ADC values.
+  - `OptoRelay::is_on()` and `LatchRelay::state()` (was `is_on`) read
+    the board.
+  - `LatchRelay::set`/`on`/`off` take a `DelayNs` and wait 120 ms after
+    the command, even if the write reports an error (see Fixed).
+  - `Buzzer::MIN_FREQUENCY`, `Vibro::DEFAULT_FREQUENCY` and
+    `Joystick::DEFAULT_DEADZONE` move to `codec::buzzer::MIN_FREQUENCY`,
+    `codec::vibro::FREQUENCY` and `codec::joystick::DEFAULT_DEADZONE`.
 
 ### Added
 
@@ -27,12 +51,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strap byte on every read, sends only exact write lengths and refuses
   frames starting `CF` or `DIE`.
 - `Error::WrongIdentity`, `Error::FrameLength`, `Error::ReservedPrefix`.
+- `codec`: a pure encoder/decoder per node kind, with the protocol
+  limits as constants (`buzzer::MIN_FREQUENCY`/`MAX_FREQUENCY`,
+  `latch_relay::SETTLE_MS` and others), and `KnobState`, `KnobRaw`,
+  `JoystickState`, `JoystickRaw`. `spec/vectors/` holds their vectors.
+
+### Fixed
+
+- `Vibro::off` sends the full 12-byte frame. 0.3 sent 8 bytes, which the
+  firmware drops (main.c:548-549), so the motor ran on until its
+  commanded duration ended. Read from the firmware source; not yet
+  observed on hardware.
+- A Buzzer frequency whose frame starts with `CF` or `DIE` (17987 Hz is
+  `CF`) is refused instead of being executed by the firmware as an
+  address change or bootloader jump.
+- A latch relay command followed at once by a read, as 0.3's `off()`
+  then `is_on()` did, could drive the wrong coil: the firmware re-reads
+  the command byte through its ~100 ms handler, and any transfer to the
+  board meanwhile overwrites it from the I2C interrupt (main.c:315-323,
+  476, 571-580). `LatchRelay` now waits the handler out. Read from the
+  firmware source; not yet observed on hardware.
 
 ### Removed
 
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `discover()` on every module (scan replaces it), the `pinstrap` module,
+  and the `addresses` entries for the node kinds above.
+- `Buzzer::tone_continuous`/`stop`; `Vibro::set_frequency`/`frequency`/
+  `on_continuous`/`stop`/`pulse`; `Knob::update`/`value`/`set_value`/
+  `reset`/`pressed`/the range and direction helpers; the `Pixels`
+  per-channel, range and brightness-only setters and `set_color_show`;
+  `Knob::rotation_delta`; `Joystick::update` and its cached getters,
+  `is_centered`, `magnitude` and `angle`;
+  `toggle` and the cached getters on both relays, `OptoRelay::update`;
+  `Pixels::clear_range`; `PowerLevel::value` and `From<PowerLevel> for
+  u8` (use `as u8`).
 
 ## [0.3.0] - 2026-07-02
 

@@ -226,7 +226,11 @@ impl<I2C: I2c> Node<I2C> {
   loop with one buffer shared by RX and TX (`main.c:476, 574-578`), so a read
   issued too soon after a write might corrupt it. This is unmeasured. If the
   bench shows it, `Node` gains an optional minimum gap; until then no
-  `DelayNs` is needed on node devices.
+  `DelayNs` is needed on node devices. The latch relay is the exception:
+  its handler re-reads the command byte between two 50 ms delays
+  (`main.c:315-323`), and any transfer to the board meanwhile overwrites
+  it from the I2C interrupt (`main.c:571-580`). That window is certain,
+  not a race, so `LatchRelay::set` takes a `DelayNs` and waits it out.
 
 ### 4.4 Codecs (`codec/`)
 
@@ -389,7 +393,7 @@ Each records the choice, the alternative, and why.
 | D10 | Own minimal chip drivers (except HS3003) | Wrap general chip crates | Smaller, uniform errors and waits, no bus ownership |
 | D11 | Spec tables as data from day one; Rust tables hand-written and checked | Code generation now; no data at all | Section 6 |
 | D12 | Scan probes with a 1-byte read over 0x01-0x77 | Zero-length write over 0x08-0x77 | RP2040 refuses zero-length writes; the latch relay is at 0x02 |
-| D13 | No write-to-read gap until measured | Conservative gap now | Avoids a `DelayNs` on every node device for an unconfirmed race |
+| D13 | No write-to-read gap until measured, except the latch relay's known 100 ms handler (4.3) | Conservative gap now | Avoids a `DelayNs` on every node device for an unconfirmed race |
 
 ## 6. Spec-readiness: keeping a formal spec and codegen open
 

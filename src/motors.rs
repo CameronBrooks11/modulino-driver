@@ -84,19 +84,6 @@ where
         Self::new_with_address(i2c, addresses::MOTORS)
     }
 
-    /// Discover if a Motors module is connected.
-    pub fn discover(i2c: &mut I2C) -> Result<u8, E> {
-        let addresses = [addresses::MOTORS];
-        for &addr in &addresses {
-            if i2c.write(addr, &[]).is_ok() {
-                return Ok(addr);
-            }
-        }
-        i2c.write(addresses[0], &[])
-            .map(|_| addresses[0])
-            .map_err(Error::I2c)
-    }
-
     /// Create a new Motors instance with a custom address.
     pub fn new_with_address(i2c: I2C, address: u8) -> Result<Self, E> {
         let mut motors = Self {
