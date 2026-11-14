@@ -708,7 +708,8 @@ mod failure_paths {
             &[status[0], status[1], sensirion_crc8(&status)],
         );
         sht.nack_idle_reads = true;
-        sht.reply_after = usize::MAX;
+        // Finite, so an unbounded retry loop fails instead of hanging.
+        sht.reply_after = 1000;
         let mut thermo = Thermo::new(chips(vec![sht]));
         assert_eq!(thermo.verify(), Err(Error::Timeout));
     }
