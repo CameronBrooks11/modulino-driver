@@ -68,6 +68,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build library
         run: cargo check --target ${{ matrix.target }}
+      - name: Build library with defmt
+        run: cargo check --target ${{ matrix.target }} --features defmt
 
   security_audit:
     name: Security Audit

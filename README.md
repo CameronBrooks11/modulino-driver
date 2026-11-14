@@ -362,7 +362,7 @@ See the `scan` module docs for the remaining limits.
 
 ## Features
 
-- `defmt`: Enable `defmt` formatting for error types (useful for embedded debugging)
+- `defmt`: derive `defmt::Format` on every public data type (errors, readings, states, spec types) for embedded logging
 
 ```toml
 [dependencies]
