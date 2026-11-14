@@ -61,6 +61,23 @@ fn matrix_mode_switch_changes_the_frame_length() {
 }
 
 #[test]
+fn a_gray_picture_is_refused_on_a_mono_board() {
+    // Node::write takes 12 or 48 for the matrix, so only the mode check
+    // keeps a 48-byte frame from a 12-byte board.
+    let mut matrix = matrix_on_bus(false);
+    assert_eq!(
+        matrix.show_gray(&[[1u8; 12]; 8]),
+        Err(Error::FrameLength {
+            expected: 12,
+            got: 48
+        })
+    );
+    let bus = matrix.release();
+    let board = bus.node(MATRIX);
+    assert_eq!((board.frames.len(), board.dropped, board.long), (0, 0, 0));
+}
+
+#[test]
 fn matrix_mode_commands_are_padded_to_the_current_length() {
     // From grayscale, a command padded to the mono length (12) is short of
     // the 48 the board expects, so the board drops it and stays grayscale.
