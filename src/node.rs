@@ -1,8 +1,9 @@
 //! Node framing: the one place that knows the node protocol.
 //!
 //! A read returns the strap byte and then the payload, with no register
-//! byte. A write must be exactly a length the board accepts, or the firmware
-//! drops it without telling the host. The firmware checks the start of every
+//! byte. The firmware acts on a write once it has received exactly the
+//! board's length: a shorter write is dropped without telling the host, and
+//! a longer one is cut to its first bytes. So only exact lengths are sent. The firmware checks the start of every
 //! write for its `CF` (address change) and `DIE` (bootloader) commands, so a
 //! data frame that starts that way is refused here rather than executed.
 
@@ -42,13 +43,13 @@ impl<I2C: I2c> Node<I2C> {
         self.i2c
             .read(self.addr.get(), &mut buf)
             .map_err(Error::I2c)?;
-        Ok(Strap(buf[0]))
+        Ok(Strap::from_read(buf[0]))
     }
 
     /// Check that the board at this address reports this node's kind.
     pub fn verify(&mut self) -> Result<(), Error<I2C::Error>> {
         let strap = self.identify()?;
-        self.check(strap.0)
+        self.check(strap.get())
     }
 
     /// Read `P` payload bytes, after checking the strap byte that precedes

@@ -83,6 +83,20 @@ fn read_checks_identity() {
 }
 
 #[test]
+fn either_knob_strap_is_a_knob() {
+    for strap in [0x74u8, 0x76] {
+        let bus = FakeBus::new(vec![FakeNode::new(strap, &[0x10, 0x00, 0x01], 4)]);
+        let addr = Address::new(strap >> 1).unwrap();
+        let mut node = Node::new(bus, addr, Kind::Knob);
+        assert_eq!(
+            node.read::<3>(),
+            Ok([0x10, 0x00, 0x01]),
+            "strap {strap:#04x}"
+        );
+    }
+}
+
+#[test]
 fn identify_returns_the_strap() {
     let mut node = buzzer();
     assert_eq!(node.identify().unwrap().kind(), Some(Kind::Buzzer));

@@ -72,8 +72,10 @@ All multi-byte fields are little-endian. Rules that apply to every node:
   after an address change (`main.c:476`). It is the board's identity.
 - **Writes must be exactly the board's receive length.** A shorter write is
   dropped by the HAL with no error visible to the host
-  (`main.c:531-561`, `stm32c0xx_hal_i2c.c:6372-6384`). There is no
-  application-level acknowledgement.
+  (`main.c:531-561`, `stm32c0xx_hal_i2c.c:6372-6384`). A longer write is
+  processed as soon as the board's length has arrived, so it acts on a
+  truncated frame (`I2C_Slave_ISR_IT`). There is no application-level
+  acknowledgement.
 - **Command prefixes are checked on every write.** `CF` + addr8 rewrites the
   address in flash and resets the board. `DIE` jumps to the ROM bootloader at
   7-bit 0x64 (`main.c:235-254`). The check runs on raw data, so a data frame
@@ -460,7 +462,7 @@ From cheapest to most expensive. Each rung proves only itself.
 
 | Question | Why it matters | Test |
 |---|---|---|
-| What does a node do with bytes beyond its write length? | Confirms exact-length framing is the only safe option | Send 40 bytes to Buttons, then read and check state |
+| What does a node do with bytes beyond its write length? | The HAL source says the first bytes are processed; whether the rest are NACKed or stretched is unread | Send 40 bytes to Buttons, then read and check state and the bus trace |
 | Is there a write-then-read race on the shared buffer? | Decides D13 | LED matrix frame immediately followed by a mode read; compare the display |
 | Is a short write really dropped? | Confirms the Vibro `off()` bug | Vibro on for 5 s, send the 8-byte off, observe |
 | Does the prefix hazard reproduce? | Confirms D8 is protecting against something real | Buzzer at 17987 Hz through a raw write, then scan: the board should come back at its strap default |

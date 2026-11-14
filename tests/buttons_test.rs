@@ -35,10 +35,21 @@ fn reads_buttons_and_sets_leds() {
 
 #[test]
 fn constructors_do_no_io() {
-    let empty = FakeBus::default();
-    let mut buttons = Buttons::new(empty);
+    let bus = FakeBus::new(vec![buttons_board([0, 0, 0])]);
+    let buttons = Buttons::new(bus);
     assert_eq!(buttons.address(), Kind::Buttons.default_address());
+    assert_eq!(buttons.release().transactions, 0);
+
+    let bus = FakeBus::new(vec![buttons_board([0, 0, 0]).at(0x40)]);
+    let buttons = Buttons::with_address(bus, Address::new(0x40).unwrap());
+    assert_eq!(buttons.release().transactions, 0);
+}
+
+#[test]
+fn missing_board_is_an_i2c_error() {
+    let mut buttons = Buttons::new(FakeBus::default());
     assert_eq!(buttons.verify(), Err(Error::I2c(Nack(0x3E))));
+    assert_eq!(buttons.read(), Err(Error::I2c(Nack(0x3E))));
 }
 
 #[test]

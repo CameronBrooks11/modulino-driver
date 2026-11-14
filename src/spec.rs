@@ -70,7 +70,8 @@ pub struct NodeSpec {
     pub kind: Kind,
     /// The kind's name in `spec/nodes.toml`.
     pub name: &'static str,
-    /// Strap bytes the firmware reports for this kind, primary first.
+    /// Strap bytes the firmware reports for this kind; the first gives the
+    /// default address.
     pub straps: &'static [u8],
     /// Bytes a read returns after the strap byte.
     pub read_payload: usize,
@@ -109,7 +110,7 @@ pub const VIBRO: NodeSpec = NodeSpec {
 pub const KNOB: NodeSpec = NodeSpec {
     kind: Kind::Knob,
     name: "knob",
-    straps: &[0x76, 0x74],
+    straps: &[0x74, 0x76],
     read_payload: 3,
     write_len: WriteLen::Fixed(4),
 };
@@ -209,6 +210,14 @@ impl Kind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moded_write_len_accepts_each_mode() {
+        let w = LED_MATRIX.write_len;
+        assert!(w.accepts(12) && w.accepts(48));
+        assert!(!w.accepts(0) && !w.accepts(13) && !w.accepts(47));
+        assert!(BUTTONS.write_len.accepts(3) && !BUTTONS.write_len.accepts(4));
+    }
 
     #[test]
     fn max_read_payload_is_the_largest() {

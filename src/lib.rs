@@ -104,9 +104,6 @@ pub use vibro::{PowerLevel, Vibro};
 /// These are the factory-default 7-bit I2C addresses. Some modules support
 /// multiple addresses via hardware configuration (solder jumpers).
 pub mod addresses {
-    /// Default address for Modulino Buttons (0x7C >> 1 = 0x3E)
-    pub const BUTTONS: u8 = 0x3E;
-
     /// Default address for Modulino Buzzer (0x3C >> 1 = 0x1E)
     pub const BUZZER: u8 = 0x1E;
 
@@ -160,9 +157,6 @@ pub mod addresses {
 pub mod pinstrap {
     /// Pinstrap address for Buzzer
     pub const BUZZER: u8 = 0x3C;
-
-    /// Pinstrap address for Buttons
-    pub const BUTTONS: u8 = 0x7C;
 
     /// Pinstrap addresses for Knob
     pub const KNOB: [u8; 2] = [0x76, 0x74];

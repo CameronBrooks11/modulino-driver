@@ -12,6 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the package to `modulino-driver` (library `modulino_driver`),
   version 0.1.0-dev. The entries below are the history of modulino-rs,
   which this crate started from at 0.3.0.
+- `Buttons` is rebuilt on the node core: `new` and `with_address` do no
+  I/O and cannot fail, `verify()` checks the board's identity, and
+  `read()` returns the state or an error. `ButtonState` moves to
+  `codec::buttons`.
+
+### Added
+
+- `spec/nodes.toml` and its mirror `spec`: node protocol constants with
+  firmware citations, checked against each other by a test.
+- `Address`, `NewAddress`, `Strap`, `Kind` and `Node`, which checks the
+  strap byte on every read, sends only exact write lengths and refuses
+  frames starting `CF` or `DIE`.
+- `Error::WrongIdentity`, `Error::FrameLength`, `Error::ReservedPrefix`.
+
+### Removed
+
+- `ButtonLed`, the `Buttons` LED fields and cached getters,
+  `Buttons::discover`, `addresses::BUTTONS` and `pinstrap::BUTTONS`.
 
 ## [0.3.0] - 2026-07-02
 

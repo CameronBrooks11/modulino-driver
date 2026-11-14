@@ -32,6 +32,9 @@ fn flag(t: &Value, key: &str) -> bool {
 #[test]
 fn buttons_vectors() {
     let doc = load("spec/vectors/buttons.toml");
+    let mut ops: Vec<&str> = doc.keys().map(String::as_str).collect();
+    ops.sort_unstable();
+    assert_eq!(ops, ["decode", "encode_leds"], "unknown op table");
 
     for case in cases(&doc, "decode") {
         let got = buttons::decode(&bytes(&case["input"]));

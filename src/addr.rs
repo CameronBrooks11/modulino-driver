@@ -2,7 +2,8 @@
 //!
 //! Addresses in the public API are always 7-bit [`Address`] values. The
 //! firmware's 8-bit strap byte is a [`Strap`], and the one conversion
-//! between them is [`Strap::default_address`].
+//! between them is [`Strap::default_address`]. A `Strap` comes only from a
+//! node read, so it cannot be built from an arbitrary byte.
 
 use crate::spec::{Kind, NODES};
 
@@ -63,9 +64,18 @@ impl From<NewAddress> for Address {
 /// board's identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Strap(pub u8);
+pub struct Strap(u8);
 
 impl Strap {
+    pub(crate) const fn from_read(byte: u8) -> Self {
+        Self(byte)
+    }
+
+    /// The raw strap byte.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
     /// The node kind that reports this strap byte, if any.
     pub fn kind(self) -> Option<Kind> {
         NODES
@@ -75,16 +85,20 @@ impl Strap {
     }
 
     /// The address a board with this strap answers at before any address
-    /// change: the strap byte shifted right by one.
-    pub const fn default_address(self) -> Address {
-        Address(self.0 >> 1)
+    /// change: the strap byte shifted right by one. `None` when that is not
+    /// a device address, as for a strap byte of 0x00 or above 0xEF.
+    pub const fn default_address(self) -> Option<Address> {
+        Address::new(self.0 >> 1)
     }
 }
 
 impl Kind {
     /// The kind's primary default address.
     pub const fn default_address(self) -> Address {
-        Strap(self.spec().straps[0]).default_address()
+        match Strap(self.spec().straps[0]).default_address() {
+            Some(a) => a,
+            None => panic!("spec strap outside the address range"),
+        }
     }
 
     /// Every default address of the kind, primary first.
@@ -92,7 +106,7 @@ impl Kind {
         self.spec()
             .straps
             .iter()
-            .map(|&s| Strap(s).default_address())
+            .filter_map(|&s| Strap(s).default_address())
     }
 
     /// Whether `strap` is one this kind reports.
@@ -129,7 +143,7 @@ mod tests {
             let mut it = Kind::Knob.default_addresses().map(Address::get);
             [it.next().unwrap(), it.next().unwrap()]
         };
-        assert_eq!(knob, [0x3B, 0x3A]);
+        assert_eq!(knob, [0x3A, 0x3B]);
     }
 
     #[test]
@@ -147,5 +161,14 @@ mod tests {
         assert_eq!(Strap(0x7C).kind(), Some(Kind::Buttons));
         assert_eq!(Strap(0x74).kind(), Some(Kind::Knob));
         assert_eq!(Strap(0x00).kind(), None);
+    }
+
+    #[test]
+    fn strap_outside_address_range_has_no_default_address() {
+        assert_eq!(Strap(0x00).default_address(), None);
+        assert_eq!(Strap(0x01).default_address(), None);
+        assert_eq!(Strap(0xF0).default_address(), None);
+        assert_eq!(Strap(0x02).default_address().map(Address::get), Some(0x01));
+        assert_eq!(Strap(0xEE).default_address().map(Address::get), Some(0x77));
     }
 }

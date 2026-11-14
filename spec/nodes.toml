@@ -3,10 +3,12 @@
 # Every board here runs node_modulino_firmware on an STM32C011. Its board
 # type comes from strap pins, read into an even byte that the firmware also
 # uses as its 8-bit I2C own-address, so the default 7-bit address is
-# strap >> 1. A read returns the strap byte followed by `read_payload` bytes.
-# A write must be exactly one of the `write_len` lengths or the firmware drops
-# it; a board with modes lists one length per mode, otherwise the single
-# length is named `default`.
+# strap >> 1; where a kind has two straps, the first gives the default
+# address. A read returns the strap byte followed by `read_payload` bytes.
+# The firmware acts on a write once it has received exactly its `write_len`
+# bytes: a shorter write is dropped, a longer one is cut to that length
+# (STM32C0 HAL I2C_Slave_ISR_IT). A board with modes lists one length per
+# mode, otherwise the single length is named `default`.
 #
 # Source lines cite `file` at `commit`. src/spec.rs mirrors this file and
 # tests/spec_conformance.rs fails when they disagree.
@@ -50,7 +52,9 @@ source = { strap = "main.c:36", read = "main.c:528", write = "main.c:548-549", h
 kind = "knob"
 revision = 1
 image = "node"
-straps = [0x76, 0x74]
+# Arduino_Modulino (Modulino.h:519) and arduino-modulino-mpy (knob.py:12)
+# both try 0x74 first.
+straps = [0x74, 0x76]
 read_payload = 3
 write_len = { default = 4 }
 source = { strap = "main.c:34-35", read = "main.c:483-488", write = "main.c:550-552", handler = "main.c:298-306" }
@@ -96,11 +100,13 @@ source = { strap = "main.c:40", read = "main.c:501-505", write = "main.c:542-545
 [[node]]
 kind = "led_matrix"
 revision = 1
-image = "node"
+# Built from the same main.c with MODULINO_LEDMATRIX_BUILD defined
+# (build.sh:26), which forces the strap instead of reading pins.
+image = "matrix"
 straps = [0x72]
 read_payload = 3
 write_len = { mono = 12, grayscale = 48 }
-source = { strap = "main.c:41", read = "main.c:506-516", write = "main.c:555-556", handler = "main.c:324-340" }
+source = { strap = "main.c:41, 821-823", read = "main.c:506-516", write = "main.c:555-556", handler = "main.c:324-340" }
 
 [[node]]
 kind = "motors"

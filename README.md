@@ -348,7 +348,8 @@ let buttons = Buttons::with_address(i2c, Address::new(0x40).unwrap());
 
 ## Minimum Supported Rust Version (MSRV)
 
-This crate requires Rust 1.75 or later.
+The library requires Rust 1.75 or later. The test suite's dev-dependencies
+need a newer toolchain.
 
 ## License
 

@@ -1,10 +1,16 @@
 //! A simulated I2C bus of Modulino node boards.
 //!
-//! `FakeNode` follows the node firmware's rules (node_modulino_firmware@7d578e0,
-//! Core/Src/main.c): a read returns the strap byte and then the payload; a
-//! write of any length other than the board's receive length is dropped with
-//! no error on the bus (531-561); a write starting `CF` moves the board to a
-//! new address and `DIE` sends it to the ROM bootloader at 0x64 (235-254).
+//! `FakeNode` follows the node firmware (node_modulino_firmware@7d578e0):
+//! - a read returns the strap byte and then the payload (main.c:471-529);
+//! - the firmware arms a receive of exactly the board's length
+//!   (main.c:531-561), and the STM32C0 HAL completes it when that many bytes
+//!   have arrived (stm32c0xx_hal_i2c.c, I2C_Slave_ISR_IT): a shorter write
+//!   is dropped with no error on the bus, a longer one is cut to that length;
+//! - a processed frame starting `CF` moves the board to a new address and
+//!   one starting `DIE` sends it to the ROM bootloader (main.c:235-254), which
+//!   answers at 0x64 (Arduino_Modulino FirmwareUpdater.ino:63-64).
+//!
+//! What the board does with the bytes past its length is not modelled.
 
 #![allow(dead_code)]
 
@@ -62,10 +68,11 @@ impl FakeNode {
     }
 
     fn write(&mut self, data: &[u8]) {
-        if data.len() != self.write_len {
+        if data.len() < self.write_len {
             self.dropped += 1;
             return;
         }
+        let data = &data[..self.write_len];
         if data.starts_with(b"DIE") {
             self.addr = BOOTLOADER;
             return;
@@ -100,12 +107,17 @@ impl i2c::Error for Nack {
 pub struct FakeBus {
     /// Boards on the bus.
     pub nodes: Vec<FakeNode>,
+    /// Transactions attempted, answered or not.
+    pub transactions: usize,
 }
 
 impl FakeBus {
     /// A bus with these boards.
     pub fn new(nodes: Vec<FakeNode>) -> Self {
-        Self { nodes }
+        Self {
+            nodes,
+            transactions: 0,
+        }
     }
 
     /// The board currently at `addr`.
@@ -123,6 +135,7 @@ impl ErrorType for FakeBus {
 
 impl I2c for FakeBus {
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), Nack> {
+        self.transactions += 1;
         if address == 0 {
             // General call: every node processes writes; nothing reads.
             for op in ops.iter_mut() {
