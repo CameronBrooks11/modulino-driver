@@ -41,6 +41,10 @@ expect = [0x53, 0xE8, 0x03, 0xFF, 0xFF, 0x00, 0x00, 0x00]
 args = { a = -32768, b = 0 }
 error = "out_of_range"
 
+[[encode_dc_speed]]
+args = { a = 0, b = -32768 }
+error = "out_of_range"
+
 [[encode_dc_frequency]]
 args = { hz = 200 }
 expect = [0x46, 0xC8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
@@ -76,6 +80,11 @@ expect = [0x47, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01]
 [[encode_stepper]]
 args = { steps = 200, period_ticks = 0, release_delay_ms = 0 }
 error = "out_of_range"
+
+# Steps 0 holds or releases the coils, so a period of 0 is accepted.
+[[encode_stepper]]
+args = { steps = 0, period_ticks = 0, release_delay_ms = 0 }
+expect = [0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
 [[encode_decay]]
 args = { mode = "slow" }
