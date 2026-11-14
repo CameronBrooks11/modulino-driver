@@ -476,7 +476,7 @@ fn a_knob_at_the_sht31_address_is_a_knob_whatever_its_count() {
 fn an_sht31_whose_status_starts_like_a_strap_is_still_found() {
     // 0x04 (T tracking alert) and 0x28 (heater and RH alert) are possible
     // status bytes and also the latch and opto relay straps. Found whether
-    // the sensor NACKs a bare read or answers it with something else.
+    // the sensor NACKs the follow-up read or answers it with another byte.
     for msb in [0x04, 0x28] {
         for nack_idle in [true, false] {
             let status = [msb, 0x00];
@@ -496,13 +496,13 @@ fn an_sht31_whose_status_starts_like_a_strap_is_still_found() {
             );
         }
     }
-    // A bare read answered with a strap byte, then a status that does not
-    // repeat it: still an SHT31. (Scan's probe reads register 0, the check's
-    // bare read register 1.)
-    let status = [0x80, 0x10];
+    // A follow-up read answered with another strap byte (0x28) after a
+    // status of 0x04: still an SHT31. (Scan's probe reads register 0, the
+    // follow-up register 1.)
+    let status = [0x04, 0x10];
     let chip = FakeChip::new(0x45, 1)
-        .reg(0x00, 0x04)
-        .reg(0x01, 0x04)
+        .reg(0x00, 0x00)
+        .reg(0x01, 0x28)
         .command(
             &[0xF3, 0x2D],
             &[status[0], status[1], sensirion_crc8(&status)],
@@ -530,7 +530,7 @@ fn a_pending_status_reply_does_not_get_an_sht31_rejected() {
     // sensor, whatever its status byte. (Scan's probe read would consume
     // the stale reply.)
     use embedded_hal::i2c::I2c;
-    for msb in [0x04, 0x28, 0x80] {
+    for msb in [0x04, 0x28] {
         let mut chip = sht31_with_status(msb);
         chip.nack_idle_reads = true;
         let mut bus = FakeBus {

@@ -44,7 +44,8 @@
 //!   that then answers a further read with the same byte, as a node at
 //!   0x45 does, is not reported as [`ChipKind::Sht31`]: the address is
 //!   classified by its probe byte instead, or left out if the probe was
-//!   NACKed. The datasheet says an SHT3x NACKs a read with nothing pending.
+//!   NACKed. An SHT3x is expected to NACK that read, as it NACKs a read
+//!   with no measurement data; unconfirmed on hardware.
 //! - Behind a hub port, the hub itself and any hub above it stay
 //!   addressable. Through port `n` a hub reads back `1 << n`, which can be
 //!   mistaken for a node (port 2 reads 0x04, the latch relay strap), so pass

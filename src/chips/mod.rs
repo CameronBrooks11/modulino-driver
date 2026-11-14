@@ -112,9 +112,11 @@ pub(crate) fn check_id<I: I2c>(
                     // by chance: a Knob strapped 0x74 at 1 in 256 counts. An
                     // SHT3x status can start with a strap value too (0x04 or
                     // 0x28 fit its defined bits, SHT3x-DIS datasheet v7
-                    // Table 18), so read once more: an SHT3x has nothing
-                    // pending now and NACKs (datasheet p. 10), while a node
-                    // repeats its strap byte.
+                    // Table 18), so read once more: a node repeats its strap
+                    // byte. An SHT3x NACKs a read with no data present after
+                    // a single-shot measurement command (datasheet p. 10);
+                    // that it does the same once its status has been read is
+                    // assumed, unconfirmed on hardware.
                     if is_node_strap(status[0])
                         && acked(bus.read(raw, &mut byte))?
                         && byte[0] == status[0]

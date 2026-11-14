@@ -352,8 +352,11 @@ refuse zero-length writes. Addresses that answer are classified by evidence:
    command (main.c:531-561) and answers with its strap byte first
    (main.c:476), so its reply can pass the status CRC by chance: a Knob
    strapped 0x74 at 1 in 256 counts. When the status starts with a strap
-   value, the check reads once more: an SHT3x has nothing pending and NACKs,
-   a node repeats its strap byte. The strap byte alone does not decide,
+   value, the check reads once more and a node repeats its strap byte. The
+   SHT3x is assumed to NACK that read, as it NACKs a read with no data
+   after a measurement command; the datasheet does not say what a read
+   after the status returns, so this is a bench item. The strap byte alone
+   does not decide,
    because 0x04 and 0x28 fit the status register's defined bits
    (datasheet Table 18); every other strap needs reserved bit 14 or 12,
    which the datasheet gives as 0.
