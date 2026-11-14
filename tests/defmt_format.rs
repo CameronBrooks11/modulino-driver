@@ -33,6 +33,7 @@ fn every_public_data_type_is_format() {
     format::<knob::KnobRaw>();
     format::<KnobState>();
     format::<led_matrix::Mode>();
+    format::<led_matrix::ModeCommand>();
     format::<motors::Mode>();
     format::<motors::DecayMode>();
     format::<motors::MotorStatus>();
