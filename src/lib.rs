@@ -20,7 +20,7 @@
 //! - [`Light`] - RGB and ambient light sensor
 //! - [`OptoRelay`] - Solid-state relay module
 //! - [`Hub`] - TCA9548A I2C multiplexer
-//! - [`Motors`] - Motor driver module (experimental)
+//! - [`Motors`] - Dual DC or stepper motor driver (experimental)
 //!
 //! ## Example
 //!
@@ -60,9 +60,7 @@ mod distance;
 mod error;
 mod hub;
 mod i2c_device;
-mod led_matrix;
 mod light;
-mod motors;
 mod movement;
 mod node;
 mod pressure;
@@ -73,6 +71,8 @@ pub use addr::{Address, NewAddress, Strap};
 pub use codec::buttons::ButtonState;
 pub use codec::joystick::{JoystickRaw, JoystickState};
 pub use codec::knob::KnobRaw;
+pub use codec::led_matrix::Mode as MatrixMode;
+pub use codec::motors::{DecayMode, Mode as MotorMode, MotorStatus};
 pub use codec::vibro::PowerLevel;
 pub use color::Color;
 pub use devices::buttons::Buttons;
@@ -80,6 +80,8 @@ pub use devices::buzzer::{Buzzer, Note};
 pub use devices::joystick::Joystick;
 pub use devices::knob::{Knob, KnobState};
 pub use devices::latch_relay::LatchRelay;
+pub use devices::led_matrix::LedMatrix;
+pub use devices::motors::Motors;
 pub use devices::opto_relay::OptoRelay;
 pub use devices::pixels::Pixels;
 pub use devices::vibro::Vibro;
@@ -87,9 +89,7 @@ pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
 pub use i2c_device::I2cDevice;
-pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
-pub use motors::{DecayMode, Motors};
 pub use movement::{Movement, MovementValues};
 pub use node::Node;
 pub use pressure::Pressure;
@@ -116,12 +116,6 @@ pub mod addresses {
     /// Default address for Modulino Pressure
     pub const PRESSURE: u8 = 0x5C;
 
-    /// Default address for Modulino LED Matrix
-    pub const LED_MATRIX: u8 = 0x39;
-
     /// Default address for Modulino Hub (0x70)
     pub const HUB: u8 = 0x70;
-
-    /// Default address for Modulino Motors (0x48 >> 1 = 0x24)
-    pub const MOTORS: u8 = 0x24;
 }

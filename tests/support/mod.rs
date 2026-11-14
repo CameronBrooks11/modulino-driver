@@ -41,9 +41,26 @@ pub struct FakeNode {
     pub dropped: usize,
     /// Set by a `CF` command.
     pub address_changes: usize,
+    /// `Some(grayscale)` for an LED matrix, whose write length and read
+    /// payload follow its mode (main.c:324-338, 506-516, 555-556).
+    pub matrix_grayscale: Option<bool>,
 }
 
 impl FakeNode {
+    /// An LED matrix at its default address, in the given mode.
+    pub fn led_matrix(grayscale: bool) -> Self {
+        let mut node = Self::new(0x72, b"MON", 12);
+        node.matrix_grayscale = Some(false);
+        node.set_matrix_mode(grayscale);
+        node
+    }
+
+    fn set_matrix_mode(&mut self, grayscale: bool) {
+        self.matrix_grayscale = Some(grayscale);
+        self.write_len = if grayscale { 48 } else { 12 };
+        self.payload = if grayscale { b"GS4" } else { b"MON" }.to_vec();
+    }
+
     /// A board at its strap default address.
     pub fn new(strap: u8, payload: &[u8], write_len: usize) -> Self {
         Self {
@@ -55,6 +72,7 @@ impl FakeNode {
             frames: Vec::new(),
             dropped: 0,
             address_changes: 0,
+            matrix_grayscale: None,
         }
     }
 
@@ -96,6 +114,16 @@ impl FakeNode {
             self.addr = new8 >> 1;
             self.address_changes += 1;
             return;
+        }
+        if self.matrix_grayscale.is_some() {
+            if data.starts_with(b"GS4") {
+                self.set_matrix_mode(true);
+                return;
+            }
+            if data.starts_with(b"MON") {
+                self.set_matrix_mode(false);
+                return;
+            }
         }
         self.frames.push(data.to_vec());
     }

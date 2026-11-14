@@ -42,6 +42,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Buzzer::MIN_FREQUENCY`, `Vibro::DEFAULT_FREQUENCY` and
     `Joystick::DEFAULT_DEADZONE` move to `codec::buzzer::MIN_FREQUENCY`,
     `codec::vibro::FREQUENCY` and `codec::joystick::DEFAULT_DEADZONE`.
+- `LedMatrix` and `Motors` are rebuilt on the node core the same way:
+  `new`/`with_address(Address)` do no I/O and cannot fail.
+  - `LedMatrix` tracks the board's mode: `verify()` and `set_mode()` read
+    it from the board, `mode()` returns it, and the `show_*` calls trust
+    it. It takes whole pictures: `show_mono(&[[bool; 12]; 8])` and
+    `show_gray(&[[u8; 12]; 8])`. A picture whose frame would start `GS4`
+    or `MON`, which the board takes as a mode switch, is refused, and a
+    picture for the other mode is `FrameLength`. Mode commands are padded
+    to the current mode's length.
+  - `Motors` sends one frame per firmware command: `set_mode`,
+    `set_speeds` (raw -32767..32767), `stop`, `set_dc_frequency`
+    (200-60 000 Hz), `step` (period at least 1 tick, as 0.3 required),
+    `hold`, `release_coils`, `set_decay`, `set_half_step`,
+    `set_half_full_scale`; `status()` returns `MotorStatus`. Out-of-range
+    values are `OutOfRange` (was `InvalidParameter`).
+    `codec::motors::current_ma` converts currents, and `Motors::MAX_SPEED`
+    becomes `codec::motors::MAX_DC_SPEED`.
+- `Error::DataError` now means a reply the protocol does not define.
 
 ### Added
 
@@ -79,6 +97,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
 - `discover()` on every module (scan replaces it), the `pinstrap` module,
   and the `addresses` entries for the node kinds above.
+- `DisplayMode` and the `LedMatrix` framebuffer API: `init`, `clear`,
+  `set_pixel`, `set_grayscale_pixel`, `set_frame`, `show`, `buffer`;
+  `new_with_address(u8)` (now `with_address(Address)`); `mode(&self)`
+  (now `mode(&mut self) -> Result<MatrixMode, _>`).
+- `Motors` helpers kept on the host in 0.3: percentage speeds
+  (`set_speed_a`/`b`, `speed_a`/`b`), inversion, stepper direction
+  inversion, `steps_per_revolution` and `move_stepper_rpm`, and the
+  getters cached by `update`, replaced by `status()` (except
+  `frequency()`, which the board does not report);
+  `impl From<u8> for DecayMode`. Renamed:
+  `set_dc_speed_raw` to `set_speeds`, `move_stepper` to `step`,
+  `hold_coils` to `hold`, `set_frequency` to `set_dc_frequency`,
+  `set_stepper_mode_enabled` to `set_mode`, `set_half_step_enabled` to
+  `set_half_step`, `set_half_full_scale_enabled` to
+  `set_half_full_scale`.
 - `Buzzer::tone_continuous`/`stop`; `Vibro::set_frequency`/`frequency`/
   `on_continuous`/`stop`/`pulse`; `Knob::update`/`value`/`set_value`/
   `reset`/`pressed`/the range and direction helpers; the `Pixels`

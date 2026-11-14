@@ -220,16 +220,23 @@ println!("Gyro: x={:.2}°/s, y={:.2}°/s, z={:.2}°/s", gyro.x, gyro.y, gyro.z);
 ### Example: LED Matrix
 
 ```rust
-use modulino_driver::LedMatrix;
+use modulino_driver::{LedMatrix, MatrixMode};
 
+// 12 columns by 8 rows; verify() reads the board's mode
 let mut matrix = LedMatrix::new(i2c);
-matrix.init()?;
+matrix.verify()?;
 
-// Set a pixel (x: 0-15, y: 0-5) to full brightness
-matrix.set_pixel(0, 0, 255)?;
+// Monochrome: pixels[row][col]
+let mut pixels = [[false; 12]; 8];
+pixels[0][0] = true;
+matrix.set_mode(MatrixMode::Mono)?;
+matrix.show_mono(&pixels)?;
 
-// Update the display
-matrix.show()?;
+// Grayscale: levels[row][col], 0-15
+let mut levels = [[0u8; 12]; 8];
+levels[7][11] = 15;
+matrix.set_mode(MatrixMode::Grayscale)?;
+matrix.show_gray(&levels)?;
 ```
 
 ### Example: Pressure & Temperature
@@ -284,20 +291,22 @@ relay.off()?;
 ### Example: Motors Control (Experimental)
 
 ```rust
-use modulino_driver::{Motors, DecayMode};
+use modulino_driver::{Motors, MotorMode};
 
-let mut motors = Motors::new(i2c)?;
+let mut motors = Motors::new(i2c);
+motors.verify()?;
 
-// Configure steps per shaft revolution (e.g. 200)
-motors.set_steps_per_revolution(200)?;
+// Two DC motors: speeds are -32767..32767
+motors.set_mode(MotorMode::Dc)?;
+motors.set_speeds(16384, -16384)?;
+motors.stop()?;
 
-// Set DC speeds as percentage of full scale (0..100)
-motors.set_speed_a(50)?;
-motors.set_speed_b(75)?;
+// One stepper: 200 steps, one every 5 ms (50 x 0.1 ms), hold afterwards
+motors.set_mode(MotorMode::Stepper)?;
+motors.step(200, 50, 0)?;
 
-// Switch mode to stepper and command 200 steps at 60 RPM
-motors.set_stepper_mode_enabled(true)?;
-motors.move_stepper_rpm(200, 60.0, 0)?;
+// Currents and flags
+let status = motors.status()?;
 ```
 
 ### Example: I2C Hub (Multiplexer)

@@ -21,7 +21,8 @@ pub enum Error<E> {
     OutOfRange,
     /// Operation timed out
     Timeout,
-    /// Data transmission error
+    /// The board sent a reply the protocol does not define, such as an
+    /// LED matrix mode other than `MON` or `GS4`.
     DataError,
     /// A node answered with a strap byte that is not one of its kind's.
     WrongIdentity {
@@ -57,7 +58,7 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
             Error::InvalidParameter => write!(f, "Invalid parameter value"),
             Error::OutOfRange => write!(f, "Value out of range"),
             Error::Timeout => write!(f, "Operation timed out"),
-            Error::DataError => write!(f, "Data transmission error"),
+            Error::DataError => write!(f, "reply not defined by the protocol"),
             Error::WrongIdentity { expected, got } => {
                 write!(
                     f,

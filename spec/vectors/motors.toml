@@ -1,0 +1,170 @@
+# Codec vectors for Modulino Motors (spec/nodes.toml kind "motors").
+#
+# Every command is 8 bytes: a letter, little-endian arguments, zero padding
+# (motors.c:613-657).
+# encode_mode: 'M', 1 for stepper, 0 for DC.
+# encode_dc_speed: 'S', speed A and B as i16, each -32767..32767 (motors.h:55).
+# encode_dc_frequency: 'F', u16 Hz, 200..60000 (motors.c:496-497).
+# encode_stepper: 'G', steps i32, period u16 in 0.1 ms ticks, release delay
+# u8 ms. A move (steps not 0) with period 0 is refused: the firmware treats
+# it like steps 0 and does not move (motors.c:525).
+# encode_decay: 'T', 0 slow, 1 mixed 30/70, 2 mixed 60/40, 3 fast.
+# encode_step_mode: 'H', 1 for half steps.
+# encode_half_full_scale: 'X', 1 for half full-scale.
+# decode_status: current A u16, current B u16, flags: 0x01 busy, 0x02
+# stepper mode, 0x04 half step, 0x08 half full-scale, 0x30 decay, 0x40
+# release on complete (motors.c:800-828).
+# current_ma: raw counts -> mA with arduino-modulino-mpy's constants
+# (motors.py:38-42, 106-109).
+
+[[encode_mode]]
+args = { mode = "dc" }
+expect = [0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_mode]]
+args = { mode = "stepper" }
+expect = [0x4D, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_dc_speed]]
+args = { a = 0, b = 0 }
+expect = [0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_dc_speed]]
+args = { a = 32767, b = -32767 }
+expect = [0x53, 0xFF, 0x7F, 0x01, 0x80, 0x00, 0x00, 0x00]
+
+[[encode_dc_speed]]
+args = { a = 1000, b = -1 }
+expect = [0x53, 0xE8, 0x03, 0xFF, 0xFF, 0x00, 0x00, 0x00]
+
+[[encode_dc_speed]]
+args = { a = -32768, b = 0 }
+error = "out_of_range"
+
+[[encode_dc_frequency]]
+args = { hz = 200 }
+expect = [0x46, 0xC8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_dc_frequency]]
+args = { hz = 1000 }
+expect = [0x46, 0xE8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_dc_frequency]]
+args = { hz = 60000 }
+expect = [0x46, 0x60, 0xEA, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_dc_frequency]]
+args = { hz = 199 }
+error = "out_of_range"
+
+[[encode_dc_frequency]]
+args = { hz = 60001 }
+error = "out_of_range"
+
+[[encode_stepper]]
+args = { steps = 200, period_ticks = 10, release_delay_ms = 0 }
+expect = [0x47, 0xC8, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00]
+
+[[encode_stepper]]
+args = { steps = -200, period_ticks = 50, release_delay_ms = 20 }
+expect = [0x47, 0x38, 0xFF, 0xFF, 0xFF, 0x32, 0x00, 0x14]
+
+[[encode_stepper]]
+args = { steps = 0, period_ticks = 1, release_delay_ms = 1 }
+expect = [0x47, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01]
+
+[[encode_stepper]]
+args = { steps = 200, period_ticks = 0, release_delay_ms = 0 }
+error = "out_of_range"
+
+[[encode_decay]]
+args = { mode = "slow" }
+expect = [0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_decay]]
+args = { mode = "mixed_30_fast_70_slow" }
+expect = [0x54, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_decay]]
+args = { mode = "mixed_60_fast_40_slow" }
+expect = [0x54, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_decay]]
+args = { mode = "fast" }
+expect = [0x54, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_step_mode]]
+args = { half_step = true }
+expect = [0x48, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_half_full_scale]]
+args = { enabled = true }
+expect = [0x58, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_step_mode]]
+args = { half_step = false }
+expect = [0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_half_full_scale]]
+args = { enabled = false }
+expect = [0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x00]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x34, 0x12, 0xFF, 0xFF, 0x00]
+expect = { current_a_raw = 4660, current_b_raw = 65535, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x01]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = true, mode = "dc", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x02]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "stepper", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x04]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = true, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x08]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = true, decay = "slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x10]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "mixed_30_fast_70_slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x20]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "mixed_60_fast_40_slow", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x30]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "fast", release_on_complete = false }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x40]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = true }
+
+[[decode_status]]
+input = [0x00, 0x00, 0x00, 0x00, 0x80]
+expect = { current_a_raw = 0, current_b_raw = 0, busy = false, mode = "dc", half_step = false, half_full_scale = false, decay = "slow", release_on_complete = false }
+
+[[current_ma]]
+args = { raw = 0, half_full_scale = false }
+expect = 0.0
+
+[[current_ma]]
+args = { raw = 4095, half_full_scale = false }
+expect = 5265.95744680851
+
+[[current_ma]]
+args = { raw = 4095, half_full_scale = true }
+expect = 2632.978723404255
+
+[[current_ma]]
+args = { raw = 100, half_full_scale = false }
+expect = 128.59480944587327
