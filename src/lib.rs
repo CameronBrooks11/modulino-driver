@@ -61,7 +61,6 @@ mod distance;
 mod error;
 mod hub;
 mod i2c_device;
-mod light;
 mod node;
 pub mod scan;
 pub mod spec;
@@ -70,6 +69,7 @@ mod thermo;
 pub use addr::{Address, NewAddress, Strap};
 pub use chips::lps22hb::Lps22hb;
 pub use chips::lsm6dsox::{Axes, Lsm6dsox};
+pub use chips::ltr381rgb::{LightReading, Ltr381rgb};
 pub use codec::buttons::ButtonState;
 pub use codec::joystick::{JoystickRaw, JoystickState};
 pub use codec::knob::KnobRaw;
@@ -91,7 +91,6 @@ pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
 pub use i2c_device::I2cDevice;
-pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use node::Node;
 pub use scan::{scan, scan_except, Found};
 pub use spec::{ChipKind, Kind};
@@ -107,9 +106,6 @@ pub mod addresses {
 
     /// Default address for Modulino Thermo
     pub const THERMO: u8 = 0x44;
-
-    /// Default address for Modulino Light
-    pub const LIGHT: u8 = 0x53;
 }
 
 /// Modulino Movement: an [`Lsm6dsox`] at 0x6A or 0x6B.
@@ -117,3 +113,6 @@ pub type Movement<I2C> = Lsm6dsox<I2C>;
 
 /// Modulino Pressure: an [`Lps22hb`] at 0x5C.
 pub type Pressure<I2C> = Lps22hb<I2C>;
+
+/// Modulino Light: an [`Ltr381rgb`] at 0x53.
+pub type Light<I2C> = Ltr381rgb<I2C>;

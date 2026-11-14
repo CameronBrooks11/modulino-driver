@@ -8,9 +8,11 @@
 
 pub mod lps22hb;
 pub mod lsm6dsox;
+pub mod ltr381rgb;
 
 pub use lps22hb::Lps22hb;
 pub use lsm6dsox::{Axes, Lsm6dsox};
+pub use ltr381rgb::Ltr381rgb;
 
 use embedded_hal::i2c::{ErrorKind, I2c};
 

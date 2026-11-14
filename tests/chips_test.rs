@@ -153,3 +153,88 @@ fn chip_types_are_reachable_under_chips() {
     let _: Lsm6dsox<FakeBus> = Movement::new(FakeBus::default());
     let _: Lps22hb<FakeBus> = Pressure::new(FakeBus::default());
 }
+
+mod light {
+    use super::*;
+    use modulino_driver::chips::ltr381rgb::{lux, Gain, Rate, Resolution};
+    use modulino_driver::{Light, LightReading};
+
+    #[test]
+    fn init_and_burst_read_sequence() {
+        let a = 0x53;
+        let expectations = [
+            T::write_read(a, vec![0x06], vec![0xC2]),
+            T::write_read(a, vec![0x07], vec![0x00]),
+            T::write(a, vec![0x05, 0x04]),
+            T::write(a, vec![0x04, 0x40]),
+            T::write(a, vec![0x00, 0x06]),
+            T::write_read(
+                a,
+                vec![0x0A],
+                vec![
+                    0xF4, 0x01, 0x00, // IR 500
+                    0xE8, 0x03, 0x00, // green 1000
+                    0x07, 0x08, 0x09, // red
+                    0x0A, 0x0B, 0xFC, // blue, top nibble outside 20 bits
+                ],
+            ),
+        ];
+        let mut light = Light::new(I2cMock::new(&expectations));
+        light.init().unwrap();
+        let reading = light.read().unwrap();
+        assert_eq!(
+            (reading.ir, reading.green, reading.red, reading.blue),
+            (500, 1000, 0x090807, 0x0C0B0A)
+        );
+        assert!(
+            (reading.lux - 800.0 / 4.5 * 0.9835).abs() < 1e-3,
+            "{reading:?}"
+        );
+        light.release().done();
+    }
+
+    #[test]
+    fn lux_matches_the_0_3_worked_example() {
+        // (0.8 * 1000) / (18 * 0.25) * (1 - 0.033 * 0.5) = 174.844
+        let want = 800.0 / 4.5 * 0.9835;
+        assert!((lux(1000, 500, Gain::X18, Resolution::Bits16) - want).abs() < 1e-3);
+        assert_eq!(lux(0, 500, Gain::X18, Resolution::Bits16), 0.0);
+        // IR far above green: the ratio is capped at 30, so the factor is
+        // 1 - 0.033 * 30 = 0.01.
+        let capped = lux(10, 10_000, Gain::X1, Resolution::Bits18);
+        assert!((capped - 0.8 * 10.0 * 0.01).abs() < 1e-6, "{capped}");
+    }
+
+    #[test]
+    fn gain_and_timing_follow_into_lux() {
+        let a = 0x53;
+        let expectations = [
+            T::write(a, vec![0x05, 0x00]),
+            T::write(a, vec![0x04, 0x22]),
+            T::write_read(
+                a,
+                vec![0x0A],
+                vec![0, 0, 0, 0xE8, 0x03, 0, 0, 0, 0, 0, 0, 0],
+            ),
+        ];
+        let mut light = Light::new(I2cMock::new(&expectations));
+        light.set_gain(Gain::X1).unwrap();
+        light.set_timing(Resolution::Bits18, Rate::Ms100).unwrap();
+        let LightReading { lux: got, .. } = light.read().unwrap();
+        assert_eq!(got, 0.8 * 1000.0);
+        light.release().done();
+    }
+
+    #[test]
+    fn wrong_part_id_is_wrong_chip() {
+        let mut light = Light::new(chips(vec![FakeChip::new(0x53, 1).reg(0x06, 0xB2)]));
+        assert_eq!(
+            light.verify(),
+            Err(Error::WrongChip {
+                expected: ChipKind::Ltr381rgb,
+                got: Some(0xB2)
+            })
+        );
+        assert_eq!(Light::new(FakeBus::default()).release().transactions, 0);
+    }
+}
