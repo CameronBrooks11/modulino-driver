@@ -39,7 +39,7 @@
 //!
 //! ## Features
 //!
-//! - `defmt`: Enable `defmt` debug formatting for error types
+//! - `defmt`: derive `defmt::Format` on every public data type
 //!
 //! ## Hardware Requirements
 //!

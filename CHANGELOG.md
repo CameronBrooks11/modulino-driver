@@ -124,6 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `spec/nodes.toml` and its mirror `spec`: node protocol constants with
   firmware citations, checked against each other by a test.
+- Every public data type, the `spec` types included, derives
+  `defmt::Format` under the `defmt` feature; a test that CI compiles with
+  `--features defmt` checks them.
 - `Address`, `NewAddress`, `Strap`, `Kind` and `Node`, which checks the
   strap byte on every read, sends only exact write lengths and refuses
   frames starting `CF` or `DIE`.

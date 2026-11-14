@@ -23,6 +23,8 @@ jobs:
         action:
           - command: check
             args: --all-targets
+          - command: check
+            args: --all-targets --features defmt
           - command: test
             args: --workspace
           - command: fmt
@@ -66,6 +68,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build library
         run: cargo check --target ${{ matrix.target }}
+      - name: Build library with defmt
+        run: cargo check --target ${{ matrix.target }} --features defmt
 
   security_audit:
     name: Security Audit
