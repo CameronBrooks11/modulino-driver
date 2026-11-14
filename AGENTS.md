@@ -14,7 +14,7 @@ modulino-rs 0.3.0 and is being restructured per
 - **Language**: Rust, edition 2021, `no_std` library
 - **Interfaces**: `embedded-hal` 1.0 `I2c` and `DelayNs`
 - **Tests**: `cargo test`, `embedded-hal-mock`
-- **CI**: fmt, clippy `-D warnings`, docs, tests, `cargo check` for
+- **CI**: fmt, clippy `-D warnings`, docs `-D warnings`, tests, `cargo check` for
   `thumbv6m-none-eabi`, `thumbv7em-none-eabihf`, `riscv32imac-unknown-none-elf`,
   `cargo check --lib` at the declared MSRV (1.75), `cargo audit`
 

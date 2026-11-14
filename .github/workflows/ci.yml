@@ -11,6 +11,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Rustdoc lints (broken links) are warnings, and clippy does not run them.
+  RUSTDOCFLAGS: -D warnings
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -45,10 +47,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Run command
         run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
-        env:
-          # Rustdoc lints (broken links) are warnings, which clippy does not
-          # run; deny them for the doc build only.
-          RUSTDOCFLAGS: ${{ matrix.action.command == 'doc' && '-D warnings' || '' }}
 
   build-targets:
     name: Build for Targets
