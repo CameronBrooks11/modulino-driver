@@ -265,7 +265,7 @@ Minimal register drivers for what each module exposes, written in the crate:
 | LSM6DSOX | Movement | `movement.rs` | Try 0x6A then 0x6B; WHO_AM_I 0x6C |
 | VL53L4CD | Distance | `distance.rs` | Fix the silent timeouts |
 | VL53L4ED | Distance | new, from ST's ULD register map | Variant selected by model ID |
-| HS3003 | Thermo | `hs3003` crate 0.1.1 | Kept as a dependency |
+| HS3003 | Thermo | `hs3003` crate 0.1.1 | Replaced by a 60-line driver: the crate ignores the stale-sample status bits and waits a fixed 100 ms |
 | SHT31 | Thermo | new, about 80 lines | Fallback at 0x45 (`Modulino.h:614-627`) |
 | LTR381RGB | Light | `light.rs` | Trim to the lux/RGB path |
 | LPS22HB | Pressure | `pressure.rs` | WHO_AM_I 0xB1 |
@@ -280,9 +280,12 @@ Rules for every chip driver:
 - Facts may come from vendor sources and datasheets. Code is not copied from
   the MPL-2.0 Arduino libraries.
 
-Wrapping maintained `embedded-hal` 1.0 crates was considered and rejected
-except for HS3003: the crates that exist expose more than the module needs,
-and each adds its own error and delay conventions to reconcile.
+Wrapping maintained `embedded-hal` 1.0 crates was considered and rejected:
+the crates that exist expose more than the module needs, and each adds its
+own error and delay conventions to reconcile. The HS3003 was the planned
+exception, until the `hs3003` crate turned out not to read the status bits
+that mark a stale sample, so it could neither refuse stale data nor time
+out.
 
 ### 4.6 Devices (`devices/`)
 
@@ -409,7 +412,7 @@ Each records the choice, the alternative, and why.
 | D7 | `HubPort` implements `I2c`, deselects every time | Caller-managed select; cached port | Routing cannot be forgotten; no stale cache |
 | D8 | Prefix guard refuses `CF`/`DIE` data frames | Send whatever the caller gives | The firmware executes them as commands |
 | D9 | Knob position offset on the host | Firmware set command | Avoids the old-firmware sign bug and the `CF` hazard |
-| D10 | Own minimal chip drivers (except HS3003) | Wrap general chip crates | Smaller, uniform errors and waits, no bus ownership |
+| D10 | Own minimal chip drivers | Wrap general chip crates | Smaller, uniform errors and waits, no bus ownership; the `hs3003` crate, first kept, cannot report stale samples |
 | D11 | Spec tables as data from day one; Rust tables hand-written and checked | Code generation now; no data at all | Section 6 |
 | D12 | Scan probes with a 1-byte read over 0x01-0x77 | Zero-length write over 0x08-0x77 | RP2040 refuses zero-length writes; the latch relay is at 0x02 |
 | D13 | No write-to-read gap until measured, except the latch relay's known 100 ms handler (4.3) | Conservative gap now | Avoids a `DelayNs` on every node device for an unconfirmed race |

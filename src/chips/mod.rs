@@ -6,9 +6,11 @@
 //! `verify()` checks the chip's identity from [`CHIPS`]
 //! and fails with [`Error::WrongChip`] if something else answers.
 
+pub mod hs3003;
 pub mod lps22hb;
 pub mod lsm6dsox;
 pub mod ltr381rgb;
+pub mod sht31;
 
 pub use lps22hb::Lps22hb;
 pub use lsm6dsox::{Axes, Lsm6dsox};

@@ -72,6 +72,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   split into `acceleration_ready`/`angular_velocity_ready` and
   `pressure_ready`/`temperature_ready`, and `Pressure::init` now resets
   the chip.
+- `Thermo` finds its sensor: an HS3003 at 0x44 or, on some boards, an
+  SHT31 at 0x45 (`verify()` returns which, `chip()` reports it).
+  `read(&mut delay)` returns `ThermoReading` (was `ThermoMeasurement`).
+  The HS3003 path refuses a stale sample (status 01) and retries,
+  ending in `Error::Timeout`; the SHT31 path retries while the sensor
+  NACKs and returns `Error::DataError` on a bad CRC. The `hs3003`
+  dependency is replaced by a small driver in `chips::hs3003`, because
+  the crate ignored the stale-sample status bits.
 - `Light` is the new `chips::Ltr381rgb` driver, trimmed to the lux/RGB
   path (design 4.5). `new_with_address(u8)` is `with_address(Address)`,
   `verify()` checks `PART_ID` (`WrongChip` where 0.3 returned
@@ -135,6 +143,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `Thermo::temperature`, `humidity` and `inner`, `Thermo::release`
+  returning the `hs3003` driver (it returns the bus), `Hs3003Error`,
+  `ThermoMeasurement::new`/`is_valid`, `addresses::THERMO`, and the
+  `hs3003` dependency.
 - `Light::new_with_address(u8)`, `enable`, `ir`, `raw_lux`, `lux`
   (use `read`), `LightMeasurement` (now `LightReading`, without
   `raw_lux`), `ColorName` and `color_name`; `addresses::LIGHT`.

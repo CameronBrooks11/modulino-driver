@@ -24,7 +24,7 @@ Apache-2.0 licence.
 | `Distance` | VL53L4CD (VL53L4ED variant not yet supported) | **Internal** | 0x29 |
 | `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
 | `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B |
-| `Thermo` | HS3003 (SHT31 variant at 0x45 not yet supported) | **External** (`hs3003`) | 0x44 |
+| `Thermo` | HS3003, or SHT31 on some boards | **Internal** | 0x44 / 0x45 |
 | `Joystick` | STM32C011 node | **Internal** | 0x2C |
 | `LatchRelay` | STM32C011 node | **Internal** | 0x02 |
 | `Vibro` | STM32C011 node | **Internal** | 0x38 |
@@ -107,11 +107,12 @@ buzzer.no_tone()?;
 use modulino_driver::Thermo;
 
 let mut thermo = Thermo::new(i2c);
+let chip = thermo.verify()?; // HS3003 at 0x44, or SHT31 at 0x45
 
-// Read temperature and humidity (requires a delay provider)
-let measurement = thermo.read(&mut delay)?;
-println!("Temperature: {:.1}°C", measurement.temperature);
-println!("Humidity: {:.1}%", measurement.humidity);
+// Measure (waits through the delay provider; Timeout if no fresh sample)
+let reading = thermo.read(&mut delay)?;
+println!("Temperature: {:.1}°C", reading.temperature);
+println!("Humidity: {:.1}%", reading.humidity);
 ```
 
 ### Example: Distance Sensor
