@@ -106,6 +106,33 @@ fn knob_offset_lives_on_the_host() {
     );
 }
 
+/// A Knob whose reads give these counts, in order (button released).
+fn knob_reading(counts: &[i16]) -> Knob<FakeBus> {
+    let mut board = FakeNode::new(0x74, &[0; 3], 4);
+    for c in counts {
+        let [lo, hi] = c.to_le_bytes();
+        board.queued.push_back(vec![lo, hi, 0]);
+    }
+    Knob::new(FakeBus::new(vec![board]))
+}
+
+#[test]
+fn knob_position_wraps_at_the_i16_limits() {
+    // Offset +1, then the board at i16::MAX: the position wraps to MIN.
+    let mut knob = knob_reading(&[0, i16::MAX]);
+    knob.set_position(1).unwrap();
+    assert_eq!(knob.read().unwrap().position, i16::MIN);
+}
+
+#[test]
+fn knob_set_position_wraps_the_offset() {
+    // The board at i16::MIN asked to read i16::MAX: the offset is
+    // MAX - MIN, which wraps to -1, and the position reads back as asked.
+    let mut knob = knob_reading(&[i16::MIN, i16::MIN]);
+    knob.set_position(i16::MAX).unwrap();
+    assert_eq!(knob.read().unwrap().position, i16::MAX);
+}
+
 #[test]
 fn knob_at_its_second_default_address() {
     let bus = FakeBus::new(vec![FakeNode::new(0x76, &[0xFE, 0xFF, 0], 4)]);
