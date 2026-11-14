@@ -7,6 +7,7 @@
 /// A node board type, identified by its strap byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum Kind {
     /// Modulino Buttons
     Buttons,

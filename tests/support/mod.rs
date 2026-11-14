@@ -5,7 +5,9 @@
 //! - the firmware arms a receive of exactly the board's length
 //!   (main.c:531-561), and the STM32C0 HAL completes it when that many bytes
 //!   have arrived (stm32c0xx_hal_i2c.c, I2C_Slave_ISR_IT): a shorter write
-//!   is dropped with no error on the bus, a longer one is cut to that length;
+//!   is dropped with no error on the bus, and a longer one has its first
+//!   bytes processed. The fake then accepts the rest; the real board may
+//!   instead stretch the clock or NACK, which is unverified;
 //! - a processed frame starting `CF` moves the board to a new address and
 //!   one starting `DIE` sends it to the ROM bootloader (main.c:235-254), which
 //!   answers at 0x64 (Arduino_Modulino FirmwareUpdater.ino:63-64).

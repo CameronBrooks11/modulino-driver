@@ -2,8 +2,8 @@
 //!
 //! Addresses in the public API are always 7-bit [`Address`] values. The
 //! firmware's 8-bit strap byte is a [`Strap`], and the one conversion
-//! between them is [`Strap::default_address`]. A `Strap` comes only from a
-//! node read, so it cannot be built from an arbitrary byte.
+//! between them is [`Strap::default_address`]. Outside this crate a `Strap`
+//! comes only from a node read; it cannot be built from an arbitrary byte.
 
 use crate::spec::{Kind, NODES};
 

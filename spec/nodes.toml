@@ -6,8 +6,9 @@
 # strap >> 1; where a kind has two straps, the first gives the default
 # address. A read returns the strap byte followed by `read_payload` bytes.
 # The firmware acts on a write once it has received exactly its `write_len`
-# bytes: a shorter write is dropped, a longer one is cut to that length
-# (STM32C0 HAL I2C_Slave_ISR_IT). A board with modes lists one length per
+# bytes: a shorter write is dropped; a longer one has its first bytes
+# processed (STM32C0 HAL I2C_Slave_ISR_IT), and what the bus does with the
+# rest is unverified. A board with modes lists one length per
 # mode, otherwise the single length is named `default`.
 #
 # Source lines cite `file` at `commit`. src/spec.rs mirrors this file and

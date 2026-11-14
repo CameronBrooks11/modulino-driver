@@ -3,9 +3,11 @@
 //! A read returns the strap byte and then the payload, with no register
 //! byte. The firmware acts on a write once it has received exactly the
 //! board's length: a shorter write is dropped without telling the host, and
-//! a longer one is cut to its first bytes. So only exact lengths are sent. The firmware checks the start of every
-//! write for its `CF` (address change) and `DIE` (bootloader) commands, so a
-//! data frame that starts that way is refused here rather than executed.
+//! a longer one has its first bytes processed while what happens to the rest
+//! is unverified (the slave may stretch the clock). So only exact lengths are
+//! sent. The firmware checks the start of every write for its `CF` (address
+//! change) and `DIE` (bootloader) commands, so a data frame that starts that
+//! way is refused here rather than executed.
 
 use embedded_hal::i2c::I2c;
 

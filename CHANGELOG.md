@@ -14,8 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which this crate started from at 0.3.0.
 - `Buttons` is rebuilt on the node core: `new` and `with_address` do no
   I/O and cannot fail, `verify()` checks the board's identity, and
-  `read()` returns the state or an error. `ButtonState` moves to
-  `codec::buttons`.
+  `read()` returns the state or an error. `new_with_address(i2c, u8)`
+  becomes `with_address(i2c, Address)`, and `address()` returns
+  `Address`. `ButtonState` moves to `codec::buttons`.
+- `Error` is `#[non_exhaustive]`.
 
 ### Added
 
@@ -28,8 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- `ButtonLed`, the `Buttons` LED fields and cached getters,
-  `Buttons::discover`, `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
+  `all_leds_off`, the cached getters, `Buttons::discover`,
+  `addresses::BUTTONS` and `pinstrap::BUTTONS`.
 
 ## [0.3.0] - 2026-07-02
 
