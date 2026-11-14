@@ -387,3 +387,255 @@ mod thermo {
         assert_eq!(Thermo::new(FakeBus::default()).release().transactions, 0);
     }
 }
+
+mod distance {
+    use super::*;
+    use modulino_driver::chips::vl53l4::{macro_period_us, range_config, Variant};
+    use modulino_driver::{Distance, DistanceReading};
+    use support::FakeDelay;
+
+    /// ST's default configuration for 0x2D..=0x87, copied from
+    /// `VL53L4CD_DEFAULT_CONFIGURATION` (stm32duino/VL53L4CD@b6ed0e2).
+    const ST_CONFIGURATION: [u8; 91] = [
+        0x12, 0x00, 0x00, 0x11, 0x02, 0x00, 0x02, 0x08, 0x00, 0x08, 0x10, 0x01, 0x01, 0x00, 0x00,
+        0x00, 0x00, 0xff, 0x00, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x0b, 0x00, 0x00, 0x02,
+        0x14, 0x21, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0xc8, 0x00, 0x00, 0x38, 0xff, 0x01,
+        0x00, 0x08, 0x00, 0x00, 0x01, 0xcc, 0x07, 0x01, 0xf1, 0x05, 0x00, 0xa0, 0x00, 0x80, 0x08,
+        0x38, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x89, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0x07, 0x05, 0x06, 0x06, 0x00, 0x00, 0x02, 0xc7, 0xff, 0x9B, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x00,
+    ];
+
+    /// A VL53L4 that has booted and reports data ready, with an
+    /// `OSC_FREQUENCY` of 3213.
+    fn sensor(model: u8) -> FakeChip {
+        FakeChip::new(0x29, 2)
+            .reg(0x010F, model)
+            .reg(0x0110, 0xAA)
+            .reg(0x00E5, 0x03)
+            .reg(0x0030, 0x01)
+            .reg(0x0031, 0x01)
+            .reg(0x0006, 0x0C)
+            .reg(0x0007, 0x8D)
+    }
+
+    fn byte(bus: &FakeBus, reg: u16) -> u8 {
+        bus.chips[0].regs.get(&reg).copied().unwrap_or(0)
+    }
+
+    fn word(bus: &FakeBus, reg: u16) -> u16 {
+        u16::from_be_bytes([byte(bus, reg), byte(bus, reg + 1)])
+    }
+
+    fn dword(bus: &FakeBus, reg: u16) -> u32 {
+        u32::from_be_bytes([0, 1, 2, 3].map(|i| byte(bus, reg + i)))
+    }
+
+    /// The single bytes written to `reg`, in order.
+    fn written(bus: &FakeBus, reg: u16) -> Vec<u8> {
+        let [hi, lo] = reg.to_be_bytes();
+        bus.chips[0]
+            .writes
+            .iter()
+            .filter(|w| w.len() == 3 && w[0] == hi && w[1] == lo)
+            .map(|w| w[2])
+            .collect()
+    }
+
+    #[test]
+    fn timing_registers_match_st_arithmetic() {
+        // Vectors from a separate transcription of ST's SetRangeTiming.
+        let macro_us = macro_period_us(3213);
+        assert_eq!(macro_us, 0xB792E8);
+        assert_eq!(range_config(50_000 - 2500, macro_us), (0x40, 0x55));
+        assert_eq!(range_config(100_000 - 2500, macro_us), (0x84, 0xB0));
+        assert_eq!(range_config((20_000 - 4300) / 2, macro_us), (0x0A, 0x0D));
+        assert_eq!(
+            range_config(200_000 - 2500, macro_period_us(3072)),
+            (0x180, 0x1AB)
+        );
+        // A degenerate oscillator reading wraps like ST's C instead of
+        // panicking.
+        let _ = range_config(10_000, macro_period_us(1));
+    }
+
+    #[test]
+    fn verify_tells_the_variants_apart() {
+        let mut cd = Distance::new(chips(vec![sensor(0xEB)]));
+        assert_eq!(cd.verify(), Ok(Variant::Cd));
+        let mut ed = Distance::new(chips(vec![sensor(0xEC)]));
+        assert_eq!(ed.verify(), Ok(Variant::Ed));
+        assert_eq!(ed.variant().map(Variant::kind), Some(ChipKind::Vl53l4ed));
+        let mut other = Distance::new(chips(vec![sensor(0xEA)]));
+        assert_eq!(
+            other.verify(),
+            Err(Error::WrongChip {
+                expected: ChipKind::Vl53l4cd,
+                got: Some(0xEA)
+            })
+        );
+        assert_eq!(Distance::new(FakeBus::default()).release().transactions, 0);
+    }
+
+    #[test]
+    fn init_follows_st_sensor_init() {
+        for (model, a, b) in [(0xEB, 0x40, 0x55), (0xEC, 0x84, 0xB0)] {
+            let mut d = Distance::new(chips(vec![sensor(model)]));
+            d.init(&mut FakeDelay::default()).unwrap();
+            let bus = d.release();
+            // The load: one byte per register from 0x2D, in order.
+            let load: Vec<(u16, u8)> = bus.chips[0]
+                .writes
+                .iter()
+                .filter(|w| w.len() == 3)
+                .take(91)
+                .map(|w| (u16::from_be_bytes([w[0], w[1]]), w[2]))
+                .collect();
+            let expected: Vec<(u16, u8)> = (0x2D..=0x87).zip(ST_CONFIGURATION).collect();
+            assert_eq!(load, expected, "configuration for {model:#x}");
+            // Configuration, VHV start, stop.
+            assert_eq!(written(&bus, 0x0087), [0x00, 0x40, 0x00]);
+            // Configuration, then the clear after VHV.
+            assert_eq!(written(&bus, 0x0086), [0x00, 0x01]);
+            assert_eq!(written(&bus, 0x0008), [0x09]);
+            assert_eq!(written(&bus, 0x000B), [0x00]);
+            assert_eq!(word(&bus, 0x0024), 0x0500);
+            assert_eq!(word(&bus, 0x005E), a, "RANGE_CONFIG_A for {model:#x}");
+            assert_eq!(word(&bus, 0x0061), b, "RANGE_CONFIG_B for {model:#x}");
+            // The configuration leaves 0x00000F89 here; continuous is 0.
+            assert_eq!(dword(&bus, 0x006C), 0, "continuous mode");
+        }
+    }
+
+    #[test]
+    fn a_sensor_that_never_boots_times_out() {
+        let mut d = Distance::new(chips(vec![sensor(0xEB).reg(0x00E5, 0x00)]));
+        let mut delay = FakeDelay::default();
+        assert_eq!(d.init(&mut delay), Err(Error::Timeout));
+        // 1000 polls, 1 ms apart.
+        assert_eq!(delay.total_ns, 1000 * 1_000_000);
+    }
+
+    #[test]
+    fn a_calibration_that_never_finishes_times_out() {
+        // The configuration sets the line active low (0x30 = 0x11); a
+        // status that stays high never reports ready.
+        let mut d = Distance::new(chips(vec![sensor(0xEB).fixed(0x0031, 0x01)]));
+        assert_eq!(d.init(&mut FakeDelay::default()), Err(Error::Timeout));
+    }
+
+    #[test]
+    fn range_timing_is_checked() {
+        let mut d = Distance::new(chips(vec![sensor(0xEB)
+            .reg(0x00DE, 0x03)
+            .reg(0x00DF, 0xFF)]));
+        assert_eq!(d.set_range_timing(9, 0), Err(Error::OutOfRange));
+        assert_eq!(d.set_range_timing(201, 0), Err(Error::OutOfRange));
+        assert_eq!(d.set_range_timing(50, 50), Err(Error::OutOfRange));
+        // 1.055 * 10 000 000 * 1023 does not fit the 32-bit register.
+        assert_eq!(d.set_range_timing(20, 10_000_000), Err(Error::OutOfRange));
+        // The boundary: 1.055 * 3979530 * 1023 is exactly 2^32 in f32, the
+        // value below it fits.
+        assert_eq!(d.set_range_timing(20, 3_979_530), Err(Error::OutOfRange));
+        let bus = d.release();
+        // Only register-pointer writes for the reads; no data written.
+        assert!(
+            bus.chips[0].writes.iter().all(|w| w.len() == 2),
+            "nothing written"
+        );
+        let mut d = Distance::new(chips(vec![sensor(0xEB)
+            .reg(0x00DE, 0x03)
+            .reg(0x00DF, 0xFF)]));
+        d.set_range_timing(20, 3_979_529).unwrap();
+        assert_eq!(dword(&d.release(), 0x006C), 4_294_966_272);
+        let mut zero = Distance::new(chips(vec![sensor(0xEB).reg(0x0006, 0).reg(0x0007, 0)]));
+        assert_eq!(zero.set_range_timing(50, 0), Err(Error::DataError));
+        let mut no_pll = Distance::new(chips(vec![sensor(0xEB)]));
+        assert_eq!(no_pll.set_range_timing(20, 100), Err(Error::DataError));
+    }
+
+    #[test]
+    fn autonomous_timing_writes_the_period() {
+        let mut d = Distance::new(chips(vec![sensor(0xEB)
+            .reg(0x00DE, 0xFD)
+            .reg(0x00DF, 0xF3)]));
+        d.set_range_timing(20, 100).unwrap();
+        let bus = d.release();
+        // The PLL value is the low 10 bits of 0xFDF3, 499; 1.055 * 100 * 499,
+        // truncated, is 52644.
+        assert_eq!(dword(&bus, 0x006C), 52644);
+        assert_eq!((word(&bus, 0x005E), word(&bus, 0x0061)), (0x0A, 0x0D));
+
+        // f32, left to right as in ST's C: (1.055 * 18) * 300 is 5697;
+        // 1.055 * (18 * 300) would be 5696.
+        let mut d = Distance::new(chips(vec![sensor(0xEB)
+            .reg(0x00DE, 0x01)
+            .reg(0x00DF, 0x2C)]));
+        d.set_range_timing(10, 18).unwrap();
+        assert_eq!(dword(&d.release(), 0x006C), 5697);
+    }
+
+    #[test]
+    fn read_maps_status_and_clears_the_interrupt() {
+        let chip = sensor(0xEB)
+            .reg(0x0089, 0x09)
+            .reg(0x008C, 0x0C)
+            .reg(0x008E, 0x01)
+            .reg(0x0091, 0x10)
+            .reg(0x0093, 0x28)
+            .reg(0x0096, 0x01)
+            .reg(0x0097, 0xF4);
+        let mut d = Distance::new(chips(vec![chip]));
+        assert_eq!(
+            d.read().unwrap(),
+            DistanceReading {
+                distance_mm: 500,
+                status: 0,
+                signal_kcps: 0x0100 * 8,
+                ambient_kcps: 0x10 * 8,
+                sigma_mm: 0x28 / 4,
+                spads: 12
+            }
+        );
+        assert_eq!(written(&d.release(), 0x0086), [0x01]);
+
+        // No SPADs: no target, whatever the raw status.
+        let mut d = Distance::new(chips(vec![sensor(0xEB).reg(0x0089, 0x09)]));
+        assert_eq!(d.read().unwrap().status, 255);
+    }
+
+    #[test]
+    fn start_ranging_by_variant_and_mode() {
+        // CD, continuous: start, wait for the first sample, clear it.
+        let mut cd = Distance::new(chips(vec![sensor(0xEB)]));
+        cd.start_ranging(&mut FakeDelay::default()).unwrap();
+        let bus = cd.release();
+        assert_eq!(written(&bus, 0x0087), [0x21]);
+        assert_eq!(written(&bus, 0x0086), [0x01], "first sample cleared");
+
+        // A period set: autonomous.
+        let mut auto = Distance::new(chips(vec![sensor(0xEB).reg(0x006F, 0x01)]));
+        auto.start_ranging(&mut FakeDelay::default()).unwrap();
+        assert_eq!(written(&auto.release(), 0x0087), [0x40]);
+
+        // ED: start only.
+        let mut ed = Distance::new(chips(vec![sensor(0xEC)]));
+        ed.start_ranging(&mut FakeDelay::default()).unwrap();
+        let bus = ed.release();
+        assert_eq!(written(&bus, 0x0087), [0x21]);
+        assert_eq!(written(&bus, 0x0086), [] as [u8; 0]);
+    }
+
+    #[test]
+    fn only_the_cd_waits_for_its_first_sample() {
+        // No verify beforehand: start_ranging finds the variant itself.
+        let never_ready = |model| sensor(model).reg(0x0031, 0x00);
+        let mut cd = Distance::new(chips(vec![never_ready(0xEB)]));
+        assert_eq!(
+            cd.start_ranging(&mut FakeDelay::default()),
+            Err(Error::Timeout)
+        );
+        let mut ed = Distance::new(chips(vec![never_ready(0xEC)]));
+        ed.start_ranging(&mut FakeDelay::default()).unwrap();
+    }
+}

@@ -7,7 +7,7 @@
 //! - [`Buttons`] - Three-button module with LEDs
 //! - [`Buzzer`] - Piezo speaker module
 //! - [`Pixels`] - 8 RGB LED module (APA102-compatible)
-//! - [`Distance`] - Time-of-Flight distance sensor (VL53L4CD; the VL53L4ED variant is not yet supported)
+//! - [`Distance`] - Time-of-flight distance sensor (VL53L4CD or VL53L4ED)
 //! - [`Movement`] - IMU module (LSM6DSOX accelerometer/gyroscope)
 //! - [`Knob`] - Rotary encoder with button
 //! - [`Thermo`] - Temperature and humidity sensor (HS3003 or SHT31)
@@ -56,10 +56,8 @@ pub mod chips;
 pub mod codec;
 mod color;
 mod devices;
-mod distance;
 mod error;
 mod hub;
-mod i2c_device;
 mod node;
 pub mod scan;
 pub mod spec;
@@ -69,6 +67,7 @@ pub use chips::hs3003::ThermoReading;
 pub use chips::lps22hb::Lps22hb;
 pub use chips::lsm6dsox::{Axes, Lsm6dsox};
 pub use chips::ltr381rgb::{LightReading, Ltr381rgb};
+pub use chips::vl53l4::{DistanceReading, Vl53l4};
 pub use codec::buttons::ButtonState;
 pub use codec::joystick::{JoystickRaw, JoystickState};
 pub use codec::knob::KnobRaw;
@@ -87,22 +86,11 @@ pub use devices::opto_relay::OptoRelay;
 pub use devices::pixels::Pixels;
 pub use devices::thermo::Thermo;
 pub use devices::vibro::Vibro;
-pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
-pub use i2c_device::I2cDevice;
 pub use node::Node;
 pub use scan::{scan, scan_except, Found};
 pub use spec::{ChipKind, Kind};
-
-/// Default I2C addresses for Modulino devices.
-///
-/// These are the factory-default 7-bit I2C addresses. Some modules support
-/// multiple addresses via hardware configuration (solder jumpers).
-pub mod addresses {
-    /// Default address for Modulino Distance
-    pub const DISTANCE: u8 = 0x29;
-}
 
 /// Modulino Movement: an [`Lsm6dsox`] at 0x6A or 0x6B.
 pub type Movement<I2C> = Lsm6dsox<I2C>;
@@ -112,3 +100,6 @@ pub type Pressure<I2C> = Lps22hb<I2C>;
 
 /// Modulino Light: an [`Ltr381rgb`] at 0x53.
 pub type Light<I2C> = Ltr381rgb<I2C>;
+
+/// Modulino Distance: a [`Vl53l4`] (VL53L4CD or VL53L4ED) at 0x29.
+pub type Distance<I2C> = Vl53l4<I2C>;

@@ -94,6 +94,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shorter variant names, and `set_config` is `set_timing`.
   `Resolution::factor` is `time_factor`; `Resolution::max_value` is
   gone.
+- `Distance` is the new `chips::Vl53l4` driver for the VL53L4CD and
+  the VL53L4ED, following ST's drivers for each. `new` does no I/O;
+  `verify()` reads the model ID and returns the variant (`WrongChip` for
+  anything else); `init(&mut delay)` boots, loads ST's configuration,
+  calibrates and sets the variant's default timing budget (50 or 100 ms,
+  continuous). `set_range_timing(budget_ms, inter_measurement_ms)`
+  replaces `set_timing_budget` and `set_inter_measurement`, computing the
+  registers from the chip's oscillator as ST does, and refuses values ST
+  refuses (`OutOfRange`), as well as a period too long for its register;
+  an oscillator or PLL reading of 0 is `DataError`.
+  `start_ranging(&mut delay)` starts continuous or autonomous ranging by
+  the period set, finding the variant first if `verify` has not run.
+  `read()` returns `DistanceReading` (distance, ST's range status,
+  signal, ambient, sigma, SPADs) and replaces `read_distance` and
+  `read_range_status`.
 - `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
   `HubPort` that implements `I2c`: each transaction selects the port,
   runs the operations and deselects, even when they fail, so any device
@@ -140,6 +155,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   board meanwhile overwrites it from the I2C interrupt (main.c:315-323,
   476, 571-580). `LatchRelay` now waits the handler out. Read from the
   firmware source; not yet observed on hardware.
+- `Distance::init` returns `Error::Timeout` when the sensor never boots
+  or never finishes calibrating; 0.3 gave up after 1001 polls and carried
+  on. `start_ranging` on a VL53L4CD has the same bound.
+- `Distance` timing budgets are computed from the oscillator reading;
+  0.3 wrote fixed register values for a few budgets, used 20 ms for any
+  other, and computed the inter-measurement period from an assumed
+  64 kHz clock. `start_ranging` starts continuous ranging when the
+  period is 0; 0.3 always started autonomous ranging. `init` no longer
+  writes `0x0081` and `0x004B`, which neither ST's drivers nor
+  arduino-modulino-mpy write.
 
 ### Removed
 
@@ -157,6 +182,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `Movement::gyro`; `MovementValues` with its `new`, `magnitude` and
   tuple conversions; `Pressure::reset`; `addresses::MOVEMENT`/`PRESSURE`;
   the `libm` dependency.
+- `Distance::new_with_address(u8)` (now `with_address(Address)`),
+  `set_timing_budget`, `set_inter_measurement`, `read_distance`,
+  `read_range_status`; `I2cDevice`, and the `addresses` module, whose
+  last entry was `DISTANCE`.
 - `discover()` on every module (scan replaces it), the `pinstrap` module,
   and the `addresses` entries for the node kinds above.
 - `DisplayMode` and the `LedMatrix` framebuffer API: `init`, `clear`,

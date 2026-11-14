@@ -115,7 +115,7 @@ fn chips_are_identified_by_their_id_checks() {
     assert_eq!(
         run(&mut bus),
         vec![
-            Found::Chip(a(0x29), ChipKind::Vl53l4),
+            Found::Chip(a(0x29), ChipKind::Vl53l4cd),
             Found::Unknown(a(0x44)),
             Found::Chip(a(0x45), ChipKind::Sht31),
             Found::Chip(a(0x53), ChipKind::Ltr381rgb),
@@ -433,4 +433,16 @@ fn any_ack_wins_on_a_shared_address() {
         ..FakeBus::new(vec![FakeNode::new(0x7C, &[0; 3], 3).at(0x45)])
     };
     assert!(bus.read(0x45, &mut [0u8; 1]).is_ok());
+}
+
+#[test]
+fn vl53l4ed_is_told_from_vl53l4cd_by_model_id() {
+    let mut bus = FakeBus {
+        chips: vec![FakeChip::new(0x29, 2).reg(0x010F, 0xEC).reg(0x0110, 0xAA)],
+        ..Default::default()
+    };
+    assert_eq!(
+        run(&mut bus),
+        vec![Found::Chip(a(0x29), ChipKind::Vl53l4ed)]
+    );
 }

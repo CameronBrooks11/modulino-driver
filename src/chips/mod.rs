@@ -11,10 +11,12 @@ pub mod lps22hb;
 pub mod lsm6dsox;
 pub mod ltr381rgb;
 pub mod sht31;
+pub mod vl53l4;
 
 pub use lps22hb::Lps22hb;
 pub use lsm6dsox::{Axes, Lsm6dsox};
 pub use ltr381rgb::Ltr381rgb;
+pub use vl53l4::Vl53l4;
 
 use embedded_hal::i2c::{ErrorKind, I2c};
 
