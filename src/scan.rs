@@ -48,11 +48,12 @@
 //!   `ErrorKind::NoAcknowledge` makes the scan stop at the first empty
 //!   address.
 
-use embedded_hal::i2c::{ErrorKind, I2c};
+use embedded_hal::i2c::I2c;
 
 use crate::addr::{Address, Strap};
+use crate::chips::{acked, has_id};
 use crate::hub::{HUB_MAX_ADDRESS, HUB_MIN_ADDRESS};
-use crate::spec::{sensirion_crc8, ChipId, ChipKind, Kind, CHIPS};
+use crate::spec::{ChipId, ChipKind, Kind, CHIPS};
 use crate::Error;
 
 /// One device found by [`scan`].
@@ -117,19 +118,10 @@ pub fn scan_except<I: I2c>(
     Ok(count)
 }
 
-/// `Ok(true)` on success, `Ok(false)` on a NACK, `Err` for anything else.
-fn acked<E: embedded_hal::i2c::Error>(result: Result<(), E>) -> Result<bool, Error<E>> {
-    match result {
-        Ok(()) => Ok(true),
-        Err(e) if matches!(e.kind(), ErrorKind::NoAcknowledge(_)) => Ok(false),
-        Err(e) => Err(Error::I2c(e)),
-    }
-}
-
 /// A chip that NACKs reads until commanded: the SHT3x.
 fn silent_chip<I: I2c>(bus: &mut I, raw: u8) -> Result<Option<ChipKind>, Error<I::Error>> {
     for chip in CHIPS.iter().filter(|c| c.addresses.contains(&raw)) {
-        if matches!(chip.id, ChipId::Sht3xStatus { .. }) && is_chip(bus, raw, chip.id)? {
+        if matches!(chip.id, ChipId::Sht3xStatus { .. }) && has_id(bus, raw, chip.id)? {
             return Ok(Some(chip.kind));
         }
     }
@@ -143,7 +135,7 @@ fn classify<I: I2c>(bus: &mut I, addr: Address, probe: u8) -> Result<Found, Erro
     }
     let mut chips = CHIPS.iter().filter(|c| c.addresses.contains(&raw));
     for chip in chips.clone() {
-        if is_chip(bus, raw, chip.id)? {
+        if has_id(bus, raw, chip.id)? {
             return Ok(Found::Chip(addr, chip.kind));
         }
     }
@@ -171,43 +163,4 @@ fn is_hub<I: I2c>(bus: &mut I, raw: u8, probe: u8) -> Result<bool, Error<I::Erro
     let hub = read? && back[0] == MASK;
     restore?;
     Ok(hub)
-}
-
-/// How many times the SHT3x status read is retried on a NACK. A NACKed read
-/// is about 11 clock periods, so 200 tries span roughly 2 ms at 1 MHz and
-/// more at slower clocks (an estimate, not a measurement), against the
-/// 1 ms Sensirion's own driver waits after a command. The tries cost
-/// nothing unless a device at the SHT31 address accepted the command.
-const SHT3X_READ_TRIES: usize = 200;
-
-fn is_chip<I: I2c>(bus: &mut I, raw: u8, id: ChipId) -> Result<bool, Error<I::Error>> {
-    let mut byte = [0u8; 1];
-    match id {
-        ChipId::Register8 {
-            register,
-            value,
-            mask,
-        } => Ok(acked(bus.write_read(raw, &[register], &mut byte))? && byte[0] & mask == value),
-        ChipId::Register16 {
-            register,
-            value,
-            mask,
-        } => Ok(
-            acked(bus.write_read(raw, &register.to_be_bytes(), &mut byte))?
-                && byte[0] & mask == value,
-        ),
-        ChipId::Sht3xStatus { command } => {
-            if !acked(bus.write(raw, &command.to_be_bytes()))? {
-                return Ok(false);
-            }
-            let mut status = [0u8; 3];
-            for _ in 0..SHT3X_READ_TRIES {
-                if acked(bus.read(raw, &mut status))? {
-                    return Ok(sensirion_crc8(&status[..2]) == status[2]);
-                }
-            }
-            Ok(false)
-        }
-        ChipId::None => Ok(false),
-    }
 }

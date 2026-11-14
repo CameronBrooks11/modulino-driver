@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `codec::motors::current_ma` converts currents, and `Motors::MAX_SPEED`
     becomes `codec::motors::MAX_DC_SPEED`.
 - `Error::DataError` now means a reply the protocol does not define.
+- `Movement` and `Pressure` are the new `chips::Lsm6dsox` and
+  `chips::Lps22hb` drivers. Constructors do no I/O and return `Self`;
+  `verify()` checks the chip's identity (`Error::WrongChip` if something
+  else answers); `init()` verifies, resets with a bounded poll
+  (`Error::Timeout` if the reset bit never clears) and configures.
+  `Movement::new` tries 0x6A and then 0x6B in `verify()`;
+  `with_address(Address)` fixes one. Axis readings are `Axes` (was
+  `MovementValues`). LPS22HB pressure is sign-extended from 24 bits.
 - `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
   `HubPort` that implements `I2c`: each transaction selects the port,
   runs the operations and deselects, even when they fail, so any device
@@ -84,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check, node strap byte) as `Found::Node`, `Chip`, `Hub` or `Unknown`.
   `spec/chips.toml` and `spec::CHIPS` hold the chip identities, and
   `ChipKind` names them.
+- `Error::WrongChip`, and the `chips` module.
 - `codec`: a pure encoder/decoder per node kind, with the protocol
   limits as constants (`buzzer::MIN_FREQUENCY`/`MAX_FREQUENCY`,
   `latch_relay::SETTLE_MS` and others), and `KnobState`, `KnobRaw`,
@@ -110,6 +119,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `Movement::new_with_address(u8)`, `MovementValues` and its
+  `magnitude`, `acceleration_magnitude`, `gyro`; `Pressure::reset`;
+  `addresses::MOVEMENT`/`PRESSURE`; the `libm` dependency.
 - `discover()` on every module (scan replaces it), the `pinstrap` module,
   and the `addresses` entries for the node kinds above.
 - `DisplayMode` and the `LedMatrix` framebuffer API: `init`, `clear`,

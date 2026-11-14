@@ -53,6 +53,7 @@
 #![deny(unsafe_code)]
 
 mod addr;
+pub mod chips;
 pub mod codec;
 mod color;
 mod devices;
@@ -61,14 +62,14 @@ mod error;
 mod hub;
 mod i2c_device;
 mod light;
-mod movement;
 mod node;
-mod pressure;
 pub mod scan;
 pub mod spec;
 mod thermo;
 
 pub use addr::{Address, NewAddress, Strap};
+pub use chips::lps22hb::Lps22hb;
+pub use chips::lsm6dsox::{Axes, Lsm6dsox};
 pub use codec::buttons::ButtonState;
 pub use codec::joystick::{JoystickRaw, JoystickState};
 pub use codec::knob::KnobRaw;
@@ -91,9 +92,7 @@ pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
 pub use i2c_device::I2cDevice;
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
-pub use movement::{Movement, MovementValues};
 pub use node::Node;
-pub use pressure::Pressure;
 pub use scan::{scan, scan_except, Found};
 pub use spec::{ChipKind, Kind};
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
@@ -106,15 +105,15 @@ pub mod addresses {
     /// Default address for Modulino Distance
     pub const DISTANCE: u8 = 0x29;
 
-    /// Default addresses for Modulino Movement (configurable via solder jumper)
-    pub const MOVEMENT: [u8; 2] = [0x6A, 0x6B];
-
     /// Default address for Modulino Thermo
     pub const THERMO: u8 = 0x44;
 
     /// Default address for Modulino Light
     pub const LIGHT: u8 = 0x53;
-
-    /// Default address for Modulino Pressure
-    pub const PRESSURE: u8 = 0x5C;
 }
+
+/// Modulino Movement: an [`Lsm6dsox`] at 0x6A or 0x6B.
+pub type Movement<I2C> = Lsm6dsox<I2C>;
+
+/// Modulino Pressure: an [`Lps22hb`] at 0x5C.
+pub type Pressure<I2C> = Lps22hb<I2C>;

@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use crate::spec::Kind;
+use crate::spec::{ChipKind, Kind};
 
 /// Error type for Modulino operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +38,12 @@ pub enum Error<E> {
         /// The length given
         got: usize,
     },
+    /// Something answered at a chip's address but failed its identity
+    /// check.
+    WrongChip {
+        /// The chip expected there
+        expected: ChipKind,
+    },
     /// A data frame starts with a firmware command prefix (`CF` or `DIE`)
     /// and would be executed as that command; nothing was sent.
     ReservedPrefix,
@@ -72,6 +78,9 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
                     "frame length {} not accepted, expected {}",
                     got, expected
                 )
+            }
+            Error::WrongChip { expected } => {
+                write!(f, "the chip at this address is not a {:?}", expected)
             }
             Error::ReservedPrefix => write!(f, "frame starts with a firmware command prefix"),
         }

@@ -206,7 +206,10 @@ relay.off(&mut delay)?;
 ```rust
 use modulino_driver::Movement;
 
-let mut movement = Movement::new(i2c)?;
+// No I/O until init(), which finds the chip at 0x6A or 0x6B, resets it and
+// configures 104 Hz, ±2 g and ±250 dps
+let mut movement = Movement::new(i2c);
+movement.init()?;
 
 // Read acceleration (in g)
 let accel = movement.acceleration()?;
@@ -245,6 +248,7 @@ matrix.show_gray(&levels)?;
 use modulino_driver::Pressure;
 
 let mut pressure = Pressure::new(i2c);
+pressure.init()?; // verify, reset, 10 Hz
 
 // Read atmospheric pressure in hPa
 let hpa = pressure.pressure()?;
