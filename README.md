@@ -331,6 +331,29 @@ let outer = RefCell::new(hub.port(7).unwrap());
 let inner = Hub::with_address(&outer, Address::new(0x71).unwrap()).unwrap();
 ```
 
+## Discovery
+
+```rust
+use modulino_driver::{scan, Address, Found};
+
+let mut found = [Found::Unknown(Address::new(1).unwrap()); 16];
+let n = scan(&mut i2c, &mut found)?;
+for f in &found[..n.min(found.len())] {
+    // Node(addr, Kind), Chip(addr, ChipKind), Hub(addr) or Unknown(addr)
+    println!("{:?}", f);
+}
+```
+
+Each answer is identified by evidence: a hub by its control register, a
+chip by its ID register (the SHT31 by its status checksum), a node board by
+the strap byte it sends first, never by its address alone. A Thermo
+board's HS3003 has no readable identity and shows as `Unknown(0x44)`.
+Behind a hub, call `scan_except` on the port and skip that hub and every
+hub above it: a hub answers through its own ports, and through port 2 its
+reply looks like a latch relay. The identity checks write register
+indexes, which other (non-Modulino) chips at those addresses may act on.
+See the `scan` module docs for the remaining limits.
+
 ## Features
 
 - `defmt`: Enable `defmt` formatting for error types (useful for embedded debugging)

@@ -315,21 +315,33 @@ let bus = buttons.release();
 
 ```rust
 pub fn scan<I: I2c>(bus: &mut I, out: &mut [Found]) -> Result<usize, Error<I::Error>>;
+pub fn scan_except<I: I2c>(bus: &mut I, skip: &[Address], out: &mut [Found])
+    -> Result<usize, Error<I::Error>>;
 pub enum Found { Node(Address, Kind), Chip(Address, ChipKind), Hub(Address), Unknown(Address) }
 ```
 
-No allocation; the caller supplies the buffer. Scanning behind a hub is
-calling `scan` on a `HubPort`.
+No allocation; the caller supplies the buffer, and the returned count can
+exceed its length, so truncation is visible. Scanning behind a hub is
+calling `scan_except` on a `HubPort`, skipping that hub and any above it:
+a TCA9548A stays addressable while a port is connected, so it would
+otherwise be found through its own port. Only a NACK means absent; any
+other bus error ends the scan.
 
 Each address in `0x01..=0x77` is probed with a 1-byte read, not a
 zero-length write, because some HALs (RP2040's I2C block is the known case)
 refuse zero-length writes. Addresses that answer are classified by evidence:
 
 1. **0x70-0x77**: hub check first. Write an odd port mask, read it back,
-   restore 0. A 1-byte write to a node is shorter than any node frame, so a
+   and restore the byte the probe read whatever the read-back shows (with a
+   same-address device on an already connected port, that byte is their
+   wired-AND). A 1-byte write to a node is shorter than any node frame, so a
    node drops it, and a node's read-back is its strap byte, which is always
    even, so it can never echo the mask.
-2. **A chip's datasheet address**: ID register check.
+2. **A chip's datasheet address**: the chip's identity check from
+   `spec/chips.toml` (an ID register, or the SHT31's status CRC). The HS3003
+   has no readable identity and its first data byte can equal a strap byte,
+   so anything at 0x44 is `Unknown`. The SHT3x NACKs reads with no data
+   pending, so at 0x45 a NACKed probe still runs the status check.
 3. **Anywhere**: strap byte from the probe read maps to a node kind.
 4. Otherwise `Unknown`. Never a guess from the address table.
 
@@ -476,7 +488,8 @@ From cheapest to most expensive. Each rung proves only itself.
 | Is a short write really dropped? | Confirms the Vibro `off()` bug | Vibro on for 5 s, send the 8-byte off, observe |
 | Does the prefix hazard reproduce? | Confirms D8 is protecting against something real | Buzzer at 17987 Hz through a raw write, then scan: the board should come back at its strap default |
 | Which firmware revision do shipped boards run? | Revision rows, Knob behaviour | Read strap and frame lengths from every board on arrival |
-| Which Distance and Thermo variants arrive? | VL53L4ED and SHT31 paths | Read the ID registers |
+| Which Distance and Thermo variants arrive? | VL53L4ED and SHT31 paths | Read the ID registers; scan finds an SHT31 at 0x45 |
+| Does the Linux host report a NACK as `NoAcknowledge`? | Scan treats any other error as fatal | Scan an empty bus through `linux-embedded-hal` |
 
 Flashing a board or changing an address on the bench is an ask-first step.
 
@@ -492,7 +505,7 @@ Each one leaves `main` green and usable. Tracked as sub-issues of one epic.
 | M3 | LED matrix and Motors | Mode-tracked matrix (12/48), Motors commands and status, vectors |
 | M4 | Hub routing | `HubPort` as `I2c`, nested ports, deselect on error, `FakeHub` |
 | M5 | Scan | Evidence-based classification over 0x01-0x77, hub check, collision tests |
-| M6 | Chip modules | `chips/` with ID checks and bounded waits; Movement 0x6B; Thermo SHT31; Distance VL53L4ED; `spec/chips.toml` |
+| M6 | Chip modules | `chips/` with ID checks and bounded waits; Movement 0x6B; Thermo SHT31; Distance VL53L4ED (`spec/chips.toml` arrived with M5) |
 | M7 | Service | `set_address`, `reset_address`, `general_call_reset` |
 | M8 | Firmware drift check | Pinned-commit extraction job in CI |
 | M9 | Bench and 0.1.0 | Bench run on every module, open questions answered in `spec/`, results table, release |

@@ -64,6 +64,7 @@ mod light;
 mod movement;
 mod node;
 mod pressure;
+pub mod scan;
 pub mod spec;
 mod thermo;
 
@@ -93,7 +94,8 @@ pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use movement::{Movement, MovementValues};
 pub use node::Node;
 pub use pressure::Pressure;
-pub use spec::Kind;
+pub use scan::{scan, scan_except, Found};
+pub use spec::{ChipKind, Kind};
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 
 /// Default I2C addresses for Modulino devices.

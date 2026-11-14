@@ -79,6 +79,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strap byte on every read, sends only exact write lengths and refuses
   frames starting `CF` or `DIE`.
 - `Error::WrongIdentity`, `Error::FrameLength`, `Error::ReservedPrefix`.
+- `scan` and `scan_except`: probe 0x01-0x77 with 1-byte reads and
+  identify each answer by evidence (hub control register, chip identity
+  check, node strap byte) as `Found::Node`, `Chip`, `Hub` or `Unknown`.
+  `spec/chips.toml` and `spec::CHIPS` hold the chip identities, and
+  `ChipKind` names them.
 - `codec`: a pure encoder/decoder per node kind, with the protocol
   limits as constants (`buzzer::MIN_FREQUENCY`/`MAX_FREQUENCY`,
   `latch_relay::SETTLE_MS` and others), and `KnobState`, `KnobRaw`,
