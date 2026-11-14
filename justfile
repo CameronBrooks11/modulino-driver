@@ -24,9 +24,9 @@ fmt-check:
 lint:
     cargo clippy --all-targets --all-features --workspace -- -D warnings
 
-# Build the docs
+# Build the docs, failing on rustdoc warnings
 doc:
-    cargo doc --no-deps --all-features
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
 # Format check, lint and docs (CI-equivalent)
 check: fmt-check lint doc
