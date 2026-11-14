@@ -369,8 +369,10 @@ pub enum Error<E> {
 }
 ```
 
-`InvalidParameter` and `DataError` from 0.3 fold into `OutOfRange` and
-`WrongIdentity`, and `DeviceNotFound` becomes `NotFound`. While M2-M6 move
+`InvalidParameter` from 0.3 folds into `OutOfRange`, and `DeviceNotFound`
+becomes `NotFound`. `DataError` stays, narrowed to a reply the protocol
+does not define (the LED matrix reports its mode as `MON` or `GS4`; anything
+else is `DataError`). While M2-M6 move
 the remaining drivers over, the 0.3 variants stay beside the new ones and
 are removed with their last user. A `defmt` feature derives
 `defmt::Format`, as today.

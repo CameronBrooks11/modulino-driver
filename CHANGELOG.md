@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the board.
   - `LatchRelay::set`/`on`/`off` take a `DelayNs` and wait 120 ms after
     the command, even if the write reports an error (see Fixed).
+  - `LedMatrix` tracks the board's mode (read on `verify()` or first use)
+    and takes whole pictures: `show_mono(&[[bool; 12]; 8])` and
+    `show_gray(&[[u8; 12]; 8])`. A picture whose frame would start `GS4`
+    or `MON`, which the board takes as a mode switch, is refused, and a
+    picture for the other mode is `FrameLength`. Mode commands are padded
+    to the current mode's length.
+  - `Motors` sends one frame per firmware command: `set_mode`,
+    `set_speeds` (raw -32767..32767), `stop`, `set_dc_frequency`
+    (200-60 000 Hz, refused outside rather than clamped), `step`, `hold`,
+    `release_coils`, `set_decay`, `set_half_step`, `set_half_full_scale`;
+    `status()` returns `MotorStatus`. `codec::motors::current_ma`
+    converts currents.
+  - `Error::DataError` now means a reply the protocol does not define.
   - `Buzzer::MIN_FREQUENCY`, `Vibro::DEFAULT_FREQUENCY` and
     `Joystick::DEFAULT_DEADZONE` move to `codec::buzzer::MIN_FREQUENCY`,
     `codec::vibro::FREQUENCY` and `codec::joystick::DEFAULT_DEADZONE`.
@@ -79,6 +92,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
 - `discover()` on every module (scan replaces it), the `pinstrap` module,
   and the `addresses` entries for the node kinds above.
+- `DisplayMode` and the `LedMatrix` framebuffer API: `init`, `clear`,
+  `set_pixel`, `set_grayscale_pixel`, `set_frame`, `show`, `buffer`.
+- `Motors` helpers kept on the host in 0.3: percentage speeds
+  (`set_speed_a`/`b`, `speed_a`/`b`), inversion, stepper direction
+  inversion, `steps_per_revolution` and `move_stepper_rpm`, and the
+  getters cached by `update`, replaced by `status()`. Renamed:
+  `set_dc_speed_raw` to `set_speeds`, `move_stepper` to `step`,
+  `hold_coils` to `hold`, `set_frequency` to `set_dc_frequency`,
+  `set_stepper_mode_enabled` to `set_mode`, `set_half_step_enabled` to
+  `set_half_step`, `set_half_full_scale_enabled` to
+  `set_half_full_scale`.
 - `Buzzer::tone_continuous`/`stop`; `Vibro::set_frequency`/`frequency`/
   `on_continuous`/`stop`/`pulse`; `Knob::update`/`value`/`set_value`/
   `reset`/`pressed`/the range and direction helpers; the `Pixels`

@@ -6,6 +6,8 @@
 //! no other case may.
 
 use modulino_driver::codec::joystick::{self, JoystickRaw};
+use modulino_driver::codec::led_matrix::{self, COLS, ROWS};
+use modulino_driver::codec::motors::{self, DecayMode};
 use modulino_driver::codec::pixels::{self, Led, LEDS};
 use modulino_driver::codec::{buttons, buzzer, knob, latch_relay, opto_relay, vibro, OutOfRange};
 use modulino_driver::Color;
@@ -42,6 +44,8 @@ fn every_vector_file_runs() {
             "joystick" => joystick_vectors,
             "knob" => knob_vectors,
             "latch_relay" => latch_relay_vectors,
+            "led_matrix" => led_matrix_vectors,
+            "motors" => motors_vectors,
             "opto_relay" => opto_relay_vectors,
             "pixels" => pixels_vectors,
             "vibro" => vibro_vectors,
@@ -227,5 +231,170 @@ fn pixels_vectors() {
             };
         }
         check_encode(case, pixels::encode(&leds));
+    }
+}
+
+fn led_matrix_vectors() {
+    let doc = load(
+        "led_matrix",
+        &[
+            "decode_mode",
+            "encode_mode_command",
+            "encode_mono",
+            "encode_gray",
+        ],
+    );
+    let mode = |name: &str| match name {
+        "mono" => led_matrix::Mode::Mono,
+        "grayscale" => led_matrix::Mode::Grayscale,
+        other => panic!("unknown mode {other:?}"),
+    };
+    // A picture starting "GS4" or "MON" must be marked, and only those.
+    let check_mode_marking = |case: &Value, frame: &[u8]| {
+        let marked = case.get("device").and_then(Value::as_str) == Some("mode_command");
+        assert_eq!(
+            led_matrix::is_mode_command(frame),
+            marked,
+            "mode marking: {case:?}"
+        );
+    };
+    for case in cases(&doc, "decode_mode") {
+        let got = led_matrix::decode_mode(&bytes(&case["input"]));
+        let want = match case["expect"].as_str().expect("mode name") {
+            "unknown" => None,
+            name => Some(mode(name)),
+        };
+        assert_eq!(got, want, "{case:?}");
+    }
+    for case in cases(&doc, "encode_mode_command") {
+        let target = mode(case["args"]["target"].as_str().expect("target"));
+        match arg::<usize>(case, "len") {
+            12 => check_encode(case, Ok(led_matrix::encode_mode_command::<12>(target))),
+            48 => check_encode(case, Ok(led_matrix::encode_mode_command::<48>(target))),
+            other => panic!("no mode has length {other}"),
+        }
+    }
+    for case in cases(&doc, "encode_mono") {
+        let mut pixels = [[false; COLS]; ROWS];
+        for p in case["pixels"].as_array().expect("pixels") {
+            let at = |k: &str| usize::try_from(int(&p[k])).expect("index");
+            pixels[at("row")][at("col")] = true;
+        }
+        let frame = led_matrix::encode_mono(&pixels);
+        check_mode_marking(case, &frame);
+        check_encode(case, Ok(frame));
+    }
+    for case in cases(&doc, "encode_gray") {
+        let mut levels = [[0u8; COLS]; ROWS];
+        for p in case["levels"].as_array().expect("levels") {
+            let at = |k: &str| usize::try_from(int(&p[k])).expect("index");
+            levels[at("row")][at("col")] = u8::try_from(int(&p["level"])).expect("level");
+        }
+        let got = led_matrix::encode_gray(&levels);
+        if let Ok(frame) = &got {
+            check_mode_marking(case, frame);
+        }
+        check_encode(case, got);
+    }
+}
+
+fn motors_vectors() {
+    let doc = load(
+        "motors",
+        &[
+            "encode_mode",
+            "encode_dc_speed",
+            "encode_dc_frequency",
+            "encode_stepper",
+            "encode_decay",
+            "encode_step_mode",
+            "encode_half_full_scale",
+            "decode_status",
+            "current_ma",
+        ],
+    );
+    let mode = |name: &str| match name {
+        "dc" => motors::Mode::Dc,
+        "stepper" => motors::Mode::Stepper,
+        other => panic!("unknown mode {other:?}"),
+    };
+    let decay = |name: &str| match name {
+        "slow" => DecayMode::Slow,
+        "mixed_30_fast_70_slow" => DecayMode::Mixed30Fast70Slow,
+        "mixed_60_fast_40_slow" => DecayMode::Mixed60Fast40Slow,
+        "fast" => DecayMode::Fast,
+        other => panic!("unknown decay {other:?}"),
+    };
+    let name = |case: &Value, key: &str| -> String {
+        case["args"][key].as_str().expect("name").to_owned()
+    };
+    for case in cases(&doc, "encode_mode") {
+        check_encode(case, Ok(motors::encode_mode(mode(&name(case, "mode")))));
+    }
+    for case in cases(&doc, "encode_dc_speed") {
+        check_encode(
+            case,
+            motors::encode_dc_speed(arg(case, "a"), arg(case, "b")),
+        );
+    }
+    for case in cases(&doc, "encode_dc_frequency") {
+        check_encode(case, motors::encode_dc_frequency(arg(case, "hz")));
+    }
+    for case in cases(&doc, "encode_stepper") {
+        let got = motors::encode_stepper(
+            arg(case, "steps"),
+            arg(case, "period_ticks"),
+            arg(case, "release_delay_ms"),
+        );
+        check_encode(case, Ok(got));
+    }
+    for case in cases(&doc, "encode_decay") {
+        check_encode(case, Ok(motors::encode_decay(decay(&name(case, "mode")))));
+    }
+    for case in cases(&doc, "encode_step_mode") {
+        check_encode(
+            case,
+            Ok(motors::encode_step_mode(flag(&case["args"], "half_step"))),
+        );
+    }
+    for case in cases(&doc, "encode_half_full_scale") {
+        let got = motors::encode_half_full_scale(flag(&case["args"], "enabled"));
+        check_encode(case, Ok(got));
+    }
+    for case in cases(&doc, "decode_status") {
+        let got = motors::decode_status(&bytes(&case["input"]));
+        let want = &case["expect"];
+        let text = |k: &str| want[k].as_str().expect("name").to_owned();
+        assert_eq!(
+            (
+                got.current_a_raw as i64,
+                got.current_b_raw as i64,
+                got.busy,
+                got.mode,
+                got.half_step,
+                got.half_full_scale,
+                got.decay,
+                got.release_on_complete,
+            ),
+            (
+                int(&want["current_a_raw"]),
+                int(&want["current_b_raw"]),
+                flag(want, "busy"),
+                mode(&text("mode")),
+                flag(want, "half_step"),
+                flag(want, "half_full_scale"),
+                decay(&text("decay")),
+                flag(want, "release_on_complete"),
+            ),
+            "{case:?}"
+        );
+    }
+    for case in cases(&doc, "current_ma") {
+        let got = motors::current_ma(arg(case, "raw"), flag(&case["args"], "half_full_scale"));
+        let want = case["expect"].as_float().expect("float");
+        assert!(
+            (got as f64 - want).abs() < 1e-3 * want.max(1.0),
+            "{case:?}: {got}"
+        );
     }
 }
