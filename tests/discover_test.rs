@@ -1,19 +1,5 @@
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
-use modulino_driver::{Buttons, Knob, OptoRelay};
-
-#[test]
-fn test_discover_buttons() {
-    let addr = 0x3E;
-    let expectations = [
-        // discover() does a 0-byte write to test if it ACKs
-        I2cTransaction::write(addr, vec![]),
-    ];
-
-    let mut i2c = I2cMock::new(&expectations);
-    let detected_addr = Buttons::discover(&mut i2c).unwrap();
-    assert_eq!(detected_addr, addr);
-    i2c.done();
-}
+use modulino_driver::{Knob, OptoRelay};
 
 #[test]
 fn test_discover_knob_first_addr() {

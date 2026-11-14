@@ -51,9 +51,11 @@
 #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
-mod buttons;
+mod addr;
 mod buzzer;
+pub mod codec;
 mod color;
+mod devices;
 mod distance;
 mod error;
 mod hub;
@@ -65,15 +67,19 @@ mod led_matrix;
 mod light;
 mod motors;
 mod movement;
+mod node;
 mod opto_relay;
 mod pixels;
 mod pressure;
+pub mod spec;
 mod thermo;
 mod vibro;
 
-pub use buttons::{ButtonLed, ButtonState, Buttons};
+pub use addr::{Address, NewAddress, Strap};
 pub use buzzer::{Buzzer, Note};
+pub use codec::buttons::ButtonState;
 pub use color::Color;
+pub use devices::buttons::Buttons;
 pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
@@ -85,9 +91,11 @@ pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use motors::{DecayMode, Motors};
 pub use movement::{Movement, MovementValues};
+pub use node::Node;
 pub use opto_relay::OptoRelay;
 pub use pixels::Pixels;
 pub use pressure::Pressure;
+pub use spec::Kind;
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
 pub use vibro::{PowerLevel, Vibro};
 
