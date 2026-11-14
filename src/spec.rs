@@ -33,6 +33,7 @@ pub enum Kind {
 
 /// The write lengths a node accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WriteLen {
     /// One length.
     Fixed(usize),
@@ -66,6 +67,7 @@ impl WriteLen {
 
 /// The protocol constants of one node kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NodeSpec {
     /// The kind these constants describe.
     pub kind: Kind,
@@ -213,6 +215,7 @@ pub enum ChipKind {
 
 /// How a chip proves its identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ChipId {
     /// Read one byte from an 8-bit register: `(byte & mask) == value`.
     Register8 {
@@ -244,6 +247,7 @@ pub enum ChipId {
 
 /// The constants of one chip kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ChipSpec {
     /// The kind these constants describe.
     pub kind: ChipKind,

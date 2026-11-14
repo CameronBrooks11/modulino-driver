@@ -145,6 +145,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `WriteLen`, `NodeSpec`, `ChipId` and `ChipSpec` derive `defmt::Format`
+  under the `defmt` feature, like every other public data type. A test
+  that CI compiles with `--features defmt` checks all of them.
 - `Vibro::off` sends the full 12-byte frame. 0.3 sent 8 bytes, which the
   firmware drops (main.c:548-549), so the motor ran on until its
   commanded duration ended. Read from the firmware source; not yet

@@ -23,6 +23,8 @@ jobs:
         action:
           - command: check
             args: --all-targets
+          - command: check
+            args: --all-targets --features defmt
           - command: test
             args: --workspace
           - command: fmt
