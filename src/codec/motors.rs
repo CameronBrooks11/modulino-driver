@@ -63,6 +63,11 @@ impl DecayMode {
 }
 
 /// The board's status report.
+///
+/// `busy` is cleared only by the end of a move or a new stepper command;
+/// switching mode mid-move leaves it set (`Motor_SetMode` never clears it).
+/// `release_on_complete` reports that the last stepper command had a
+/// release delay above 0 (motors.c:790-792).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MotorStatus {
@@ -117,14 +122,22 @@ pub fn encode_dc_frequency(hz: u16) -> Result<[u8; WRITE_LEN], OutOfRange> {
 /// period in 0.1 ms timer ticks (motors.c:316), and how long to keep the
 /// coils energised after the move, in ms (0 holds them).
 ///
-/// With `steps` or `period_ticks` 0 nothing moves; the coils are held, or
-/// released after `release_delay_ms` (motors.c:525-540).
-pub fn encode_stepper(steps: i32, period_ticks: u16, release_delay_ms: u8) -> [u8; WRITE_LEN] {
+/// With `steps` 0 nothing moves; the coils are held, or released after
+/// `release_delay_ms` (motors.c:525-540). The firmware treats a period of 0
+/// the same way, so a move with `period_ticks` 0 is refused.
+pub fn encode_stepper(
+    steps: i32,
+    period_ticks: u16,
+    release_delay_ms: u8,
+) -> Result<[u8; WRITE_LEN], OutOfRange> {
+    if steps != 0 && period_ticks == 0 {
+        return Err(OutOfRange);
+    }
     let (s, p) = (steps.to_le_bytes(), period_ticks.to_le_bytes());
-    frame(
+    Ok(frame(
         b'G',
         &[s[0], s[1], s[2], s[3], p[0], p[1], release_delay_ms],
-    )
+    ))
 }
 
 /// Encode the decay mode (`T`).

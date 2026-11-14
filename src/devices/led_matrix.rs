@@ -12,8 +12,11 @@ use crate::Error;
 /// Driver for the Modulino LED Matrix module.
 ///
 /// The board's write length depends on its mode, so the driver tracks the
-/// mode: it reads it on [`LedMatrix::verify`], or on first use, and updates
-/// it on every [`LedMatrix::set_mode`].
+/// mode. [`LedMatrix::verify`] and [`LedMatrix::set_mode`] read it from the
+/// board; the `show_*` calls trust the tracked mode. If the board may have
+/// been reset (it boots monochrome) or switched by another host, call
+/// `verify()` to read it again. Switching mode leaves the old picture
+/// reinterpreted on screen until the next one is shown (matrix.c:174-181).
 ///
 /// ```rust,ignore
 /// use modulino_driver::{LedMatrix, MatrixMode};
@@ -51,8 +54,8 @@ impl<I2C: I2c> LedMatrix<I2C> {
     }
 
     /// Check that an LED matrix answers at this address, and read its mode.
-    pub fn verify(&mut self) -> Result<Mode, Error<I2C::Error>> {
-        self.read_mode()
+    pub fn verify(&mut self) -> Result<(), Error<I2C::Error>> {
+        self.read_mode().map(|_| ())
     }
 
     /// The board's mode: the tracked one, or read from the board if not
@@ -64,10 +67,11 @@ impl<I2C: I2c> LedMatrix<I2C> {
         }
     }
 
-    /// Switch the board to `target`. The command is padded to the length
-    /// of the board's current mode, as the firmware requires.
+    /// Switch the board to `target`. The board's current mode is read
+    /// first, so the command can be padded to that mode's length, the only
+    /// length the firmware accepts.
     pub fn set_mode(&mut self, target: Mode) -> Result<(), Error<I2C::Error>> {
-        let sent = match self.mode()? {
+        let sent = match self.read_mode()? {
             Mode::Mono => self
                 .node
                 .write(&codec::encode_mode_command::<MONO_LEN>(target)),
@@ -128,6 +132,10 @@ impl<I2C: I2c> LedMatrix<I2C> {
         if codec::is_mode_command(frame) {
             return Err(Error::ReservedPrefix);
         }
-        self.node.write(frame)
+        let sent = self.node.write(frame);
+        if sent.is_err() {
+            self.mode = None;
+        }
+        sent
     }
 }

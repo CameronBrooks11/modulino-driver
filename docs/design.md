@@ -366,6 +366,7 @@ pub enum Error<E> {
     InvalidAddress,
     OutOfRange,
     Timeout,
+    DataError,
 }
 ```
 

@@ -11,9 +11,15 @@ use crate::Error;
 
 /// Driver for the Modulino Motors module.
 ///
-/// The firmware ignores DC commands in stepper mode and stepper commands
-/// in DC mode, without telling the host; [`Motors::status`] reports the
-/// mode.
+/// Firmware behaviour to plan around (motors.c):
+///
+/// - DC commands are ignored in stepper mode and stepper commands in DC
+///   mode, without telling the host; [`Motors::status`] reports the mode.
+/// - A frequency change keeps the timer compare values, so it changes the
+///   duty of motors already running (motors.c:467-476, 499-500): set the
+///   frequency before the speeds.
+/// - `step`, `hold` and `release_coils` cancel a move in progress
+///   (motors.c:513-518).
 ///
 /// ```rust,ignore
 /// use modulino_driver::{MotorMode, Motors};
@@ -75,19 +81,17 @@ impl<I2C: I2c> Motors<I2C> {
     }
 
     /// Move the stepper `steps` (negative is backwards), one step every
-    /// `period_ticks` × 0.1 ms, then keep the coils energised for
-    /// `release_delay_ms` (0 holds them) (stepper mode).
+    /// `period_ticks` × 0.1 ms (at least 1), then keep the coils energised
+    /// for `release_delay_ms` (0 holds them) (stepper mode).
     pub fn step(
         &mut self,
         steps: i32,
         period_ticks: u16,
         release_delay_ms: u8,
     ) -> Result<(), Error<I2C::Error>> {
-        self.node.write(&codec::encode_stepper(
-            steps,
-            period_ticks,
-            release_delay_ms,
-        ))
+        let frame = codec::encode_stepper(steps, period_ticks, release_delay_ms)
+            .map_err(OutOfRange::into_error)?;
+        self.node.write(&frame)
     }
 
     /// Energise the stepper coils at the current phase (stepper mode).

@@ -346,7 +346,7 @@ fn motors_vectors() {
             arg(case, "period_ticks"),
             arg(case, "release_delay_ms"),
         );
-        check_encode(case, Ok(got));
+        check_encode(case, got);
     }
     for case in cases(&doc, "encode_decay") {
         check_encode(case, Ok(motors::encode_decay(decay(&name(case, "mode")))));

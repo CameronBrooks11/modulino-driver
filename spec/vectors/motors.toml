@@ -6,7 +6,8 @@
 # encode_dc_speed: 'S', speed A and B as i16, each -32767..32767 (motors.h:55).
 # encode_dc_frequency: 'F', u16 Hz, 200..60000 (motors.c:496-497).
 # encode_stepper: 'G', steps i32, period u16 in 0.1 ms ticks, release delay
-# u8 ms.
+# u8 ms. A move (steps not 0) with period 0 is refused: the firmware treats
+# it like steps 0 and does not move (motors.c:525).
 # encode_decay: 'T', 0 slow, 1 mixed 30/70, 2 mixed 60/40, 3 fast.
 # encode_step_mode: 'H', 1 for half steps.
 # encode_half_full_scale: 'X', 1 for half full-scale.
@@ -71,6 +72,10 @@ expect = [0x47, 0x38, 0xFF, 0xFF, 0xFF, 0x32, 0x00, 0x14]
 [[encode_stepper]]
 args = { steps = 0, period_ticks = 1, release_delay_ms = 1 }
 expect = [0x47, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01]
+
+[[encode_stepper]]
+args = { steps = 200, period_ticks = 0, release_delay_ms = 0 }
+error = "out_of_range"
 
 [[encode_decay]]
 args = { mode = "slow" }

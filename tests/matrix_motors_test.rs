@@ -21,7 +21,8 @@ fn constructors_do_no_io() {
 #[test]
 fn matrix_mode_switch_changes_the_frame_length() {
     let mut matrix = matrix_on_bus(false);
-    assert_eq!(matrix.verify().unwrap(), MatrixMode::Mono);
+    matrix.verify().unwrap();
+    assert_eq!(matrix.mode().unwrap(), MatrixMode::Mono);
 
     let mut picture = [[false; 12]; 8];
     picture[0][0] = true;
@@ -41,7 +42,8 @@ fn matrix_mode_switch_changes_the_frame_length() {
     matrix.show_gray(&levels).unwrap();
 
     matrix.set_mode(MatrixMode::Mono).unwrap();
-    assert_eq!(matrix.verify().unwrap(), MatrixMode::Mono);
+    matrix.verify().unwrap();
+    assert_eq!(matrix.mode().unwrap(), MatrixMode::Mono);
 
     let bus = matrix.release();
     let board = bus.node(MATRIX);
@@ -59,15 +61,23 @@ fn matrix_mode_switch_changes_the_frame_length() {
 
 #[test]
 fn matrix_mode_commands_are_padded_to_the_current_length() {
-    // The board drops a command of the wrong length, so it stays in its
-    // mode; padding to the new mode's length would leave it there.
-    let mut matrix = matrix_on_bus(false);
-    matrix.set_mode(MatrixMode::Grayscale).unwrap();
-    assert_eq!(matrix.release().node(MATRIX).matrix_grayscale, Some(true));
-
+    // From grayscale, a command padded to the mono length (12) is short of
+    // the 48 the board expects, so the board drops it and stays grayscale.
+    // (The other direction cannot tell: a long write has its first bytes
+    // processed.)
     let mut matrix = matrix_on_bus(true);
     matrix.set_mode(MatrixMode::Mono).unwrap();
     assert_eq!(matrix.release().node(MATRIX).matrix_grayscale, Some(false));
+}
+
+#[test]
+fn matrix_set_mode_reads_the_board_first() {
+    // The tracked mode can be stale (board reset, another host), so
+    // set_mode reads the board before padding its command.
+    let mut matrix = matrix_on_bus(false);
+    matrix.verify().unwrap();
+    matrix.set_mode(MatrixMode::Grayscale).unwrap();
+    assert_eq!(matrix.release().transactions, 3, "verify, read, write");
 }
 
 #[test]
@@ -128,6 +138,7 @@ fn motors_send_one_frame_per_command() {
     motors.set_half_full_scale(true).unwrap();
     assert_eq!(motors.set_dc_frequency(199), Err(Error::OutOfRange));
     assert_eq!(motors.set_speeds(i16::MIN, 0), Err(Error::OutOfRange));
+    assert_eq!(motors.step(200, 0, 0), Err(Error::OutOfRange));
 
     let bus = motors.release();
     let frames = &bus.node(MOTORS).frames;
