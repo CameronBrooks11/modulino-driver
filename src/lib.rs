@@ -7,16 +7,20 @@
 //! - [`Buttons`] - Three-button module with LEDs
 //! - [`Buzzer`] - Piezo speaker module
 //! - [`Pixels`] - 8 RGB LED module (APA102-compatible)
-//! - [`Distance`] - Time-of-Flight distance sensor (VL53L4CD)
+//! - [`Distance`] - Time-of-Flight distance sensor (VL53L4CD; the VL53L4ED variant is not yet supported)
 //! - [`Movement`] - IMU module (LSM6DSOX accelerometer/gyroscope)
 //! - [`Knob`] - Rotary encoder with button
-//! - [`Thermo`] - Temperature and humidity sensor (wraps [`hs3003`](https://crates.io/crates/hs3003) crate)
+//! - [`Thermo`] - Temperature and humidity sensor (HS3003, wraps the [`hs3003`](https://crates.io/crates/hs3003) crate;
+//!   the SHT31 variant is not yet supported)
 //! - [`Joystick`] - Analog joystick with button
 //! - [`LatchRelay`] - Latching relay module
 //! - [`Vibro`] - Vibration motor module
 //! - [`LedMatrix`] - 12x8 LED matrix display
 //! - [`Pressure`] - Barometric pressure and temperature sensor
 //! - [`Light`] - RGB and ambient light sensor
+//! - [`OptoRelay`] - Solid-state relay module
+//! - [`Hub`] - TCA9548A I2C multiplexer
+//! - [`Motors`] - Motor driver module (experimental)
 //!
 //! ## Example
 //!

@@ -37,10 +37,11 @@ Apache-2.0 licence.
 
 A node board runs Arduino's `node_modulino_firmware` on an STM32C011 and
 drives its LEDs, buttons or motors itself; the host talks only to the
-STM32. Its default address is its strap byte shifted right by one
-(`Core/Src/main.c:32-42` at `7d578e0`). Arduino's library also handles the
-SHT31 and VL53L4ED variants (`Arduino_Modulino` `src/Modulino.h:614-627`,
-`885-900` at `24d08a9`).
+STM32. Its default address is its strap byte shifted right by one: the
+straps are at `Core/Src/main.c:32-42`, packed into bits 6..1 at `819-845`,
+and used as the HAL own-address at `652`, all at `7d578e0`. Arduino's
+library also handles the SHT31 and VL53L4ED variants (`Arduino_Modulino` `src/Modulino.h:614-627`,
+`946-965` at `24d08a9`).
 
 ## Usage
 
