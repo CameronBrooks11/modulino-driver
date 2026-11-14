@@ -400,9 +400,9 @@ fn nacked_hub_restore_is_an_error() {
 
 #[test]
 fn sht31_status_read_error_stops_the_scan() {
-    // 0x45: probe (NACKed, silent sensor), bare read, command, then the
-    // status read. A bus error at any step of the check stops the scan.
-    for n in [2, 3, 4] {
+    // 0x45: probe (NACKed, silent sensor), command, then the status read.
+    // A bus error at either step of the check stops the scan.
+    for n in [2, 3] {
         let bus = FakeBus {
             chips: vec![sht31(0)],
             ..Default::default()
@@ -423,10 +423,9 @@ fn sht31_status_read_error_stops_the_scan() {
 fn an_empty_bus_costs_one_probe_per_address() {
     let mut bus = FakeBus::default();
     run(&mut bus);
-    // One probe per address, plus the SHT31 check at 0x45, which runs after
-    // a NACKed probe: a bare read, then the status command, which stops at
-    // its own NACK.
-    assert_eq!(bus.transactions, 0x77 + 2);
+    // One probe per address, plus the SHT31 status command at 0x45, which
+    // runs after a NACKed probe and stops at its own NACK.
+    assert_eq!(bus.transactions, 0x77 + 1);
 }
 
 #[test]
@@ -513,4 +512,66 @@ fn an_sht31_whose_status_starts_like_a_strap_is_still_found() {
         ..Default::default()
     };
     assert_eq!(run(&mut bus), vec![Found::Chip(a(0x45), ChipKind::Sht31)]);
+}
+
+/// An SHT31 at 0x45 whose status starts with `msb`.
+fn sht31_with_status(msb: u8) -> FakeChip {
+    let status = [msb, 0x10];
+    FakeChip::new(0x45, 1).command(
+        &[0xF3, 0x2D],
+        &[status[0], status[1], sensirion_crc8(&status)],
+    )
+}
+
+#[test]
+fn a_pending_status_reply_does_not_get_an_sht31_rejected() {
+    // A status reply left unread from an earlier check: the next
+    // Thermo::verify, which makes no probe read first, must still find the
+    // sensor, whatever its status byte. (Scan's probe read would consume
+    // the stale reply.)
+    use embedded_hal::i2c::I2c;
+    for msb in [0x04, 0x28, 0x80] {
+        let mut chip = sht31_with_status(msb);
+        chip.nack_idle_reads = true;
+        let mut bus = FakeBus {
+            chips: vec![chip],
+            ..Default::default()
+        };
+        bus.write(0x45, &[0xF3, 0x2D]).unwrap();
+        let mut thermo = modulino_driver::Thermo::new(bus);
+        assert_eq!(thermo.verify(), Ok(ChipKind::Sht31), "status {msb:#04x}");
+    }
+}
+
+#[test]
+fn an_sht31_that_repeats_a_strap_valued_status_is_not_reported() {
+    // Known limit: an SHT31 whose status starts with 0x04 and that answers
+    // the follow-up read with 0x04 looks like a latch relay. The probe read
+    // gives 0x00 (register 0), so the address is Unknown.
+    let chip = sht31_with_status(0x04).reg(0x01, 0x04);
+    let mut bus = FakeBus {
+        chips: vec![chip],
+        ..Default::default()
+    };
+    assert_eq!(run(&mut bus), vec![Found::Unknown(a(0x45))]);
+}
+
+#[test]
+fn a_bus_error_on_the_follow_up_read_stops_the_scan() {
+    // 0x45: probe (NACKed), command, status read (0x04, a strap value),
+    // then the follow-up read, which fails.
+    let mut chip = sht31_with_status(0x04);
+    chip.nack_idle_reads = true;
+    let bus = FakeBus {
+        chips: vec![chip],
+        ..Default::default()
+    };
+    let mut bus = FailNth::new(bus, 0x45, 4, embedded_hal::i2c::ErrorKind::Bus);
+    let mut out = [Found::Unknown(a(1)); 4];
+    assert_eq!(
+        scan(&mut bus, &mut out),
+        Err(modulino_driver::Error::I2c(
+            embedded_hal::i2c::ErrorKind::Bus
+        ))
+    );
 }

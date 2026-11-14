@@ -56,7 +56,8 @@ pub(crate) enum IdCheck {
     /// The identity matched.
     Match,
     /// Something answered with another identity: the byte read, or `None`
-    /// for an SHT3x status whose CRC did not match.
+    /// for an SHT3x status whose CRC did not match. A node that answered
+    /// the SHT3x check gives its strap byte.
     Mismatch(Option<u8>),
     /// An SHT3x accepted the command but never released its status.
     NoReply,
@@ -98,27 +99,29 @@ pub(crate) fn check_id<I: I2c>(
             Ok(compare(byte[0], value, mask))
         }
         ChipId::Sht3xStatus { command } => {
-            // A node answers every read with its strap byte first, and drops
-            // the 2-byte command, which is shorter than any node frame. Its
-            // status reply is then its strap again, and the CRC can pass by
-            // chance (a Knob at 1 in 256 counts). So read once before the
-            // command: a strap byte there that the reply repeats is a node.
-            // The strap alone is not enough, since an SHT3x status can start
-            // with 0x04 or 0x28, the latch and opto relay straps.
-            let read = acked(bus.read(raw, &mut byte))?;
-            let node_strap = (read && is_node_strap(byte[0])).then_some(byte[0]);
             bus.write(raw, &command.to_be_bytes()).map_err(Error::I2c)?;
             let mut status = [0u8; 3];
             for _ in 0..SHT3X_READ_TRIES {
                 if acked(bus.read(raw, &mut status))? {
-                    if node_strap == Some(status[0]) {
+                    if sensirion_crc8(&status[..2]) != status[2] {
+                        return Ok(IdCheck::Mismatch(None));
+                    }
+                    // A node drops the 2-byte command, shorter than any node
+                    // frame (main.c:531-561), and starts every read with its
+                    // strap byte (main.c:476), so its reply can pass the CRC
+                    // by chance: a Knob strapped 0x74 at 1 in 256 counts. An
+                    // SHT3x status can start with a strap value too (0x04 or
+                    // 0x28 fit its defined bits, SHT3x-DIS datasheet v7
+                    // Table 18), so read once more: an SHT3x has nothing
+                    // pending now and NACKs (datasheet p. 10), while a node
+                    // repeats its strap byte.
+                    if is_node_strap(status[0])
+                        && acked(bus.read(raw, &mut byte))?
+                        && byte[0] == status[0]
+                    {
                         return Ok(IdCheck::Mismatch(Some(status[0])));
                     }
-                    return Ok(if sensirion_crc8(&status[..2]) == status[2] {
-                        IdCheck::Match
-                    } else {
-                        IdCheck::Mismatch(None)
-                    });
+                    return Ok(IdCheck::Match);
                 }
             }
             Ok(IdCheck::NoReply)
