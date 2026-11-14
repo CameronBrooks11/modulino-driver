@@ -54,10 +54,75 @@ fn a_mode_kind_reports_its_mono_length_for_a_bad_frame() {
     assert_eq!(node.release().transactions, 0, "nothing sent");
 }
 
+/// Semitones from A4 for every note. The match is exhaustive, so a new
+/// `Note` fails to compile here until it is given its place.
+fn semitones_from_a4(note: Note) -> Option<i32> {
+    Some(match note {
+        Note::FS3 => -15,
+        Note::G3 => -14,
+        Note::GS3 => -13,
+        Note::A3 => -12,
+        Note::AS3 => -11,
+        Note::B3 => -10,
+        Note::C4 => -9,
+        Note::CS4 => -8,
+        Note::D4 => -7,
+        Note::DS4 => -6,
+        Note::E4 => -5,
+        Note::F4 => -4,
+        Note::FS4 => -3,
+        Note::G4 => -2,
+        Note::GS4 => -1,
+        Note::A4 => 0,
+        Note::AS4 => 1,
+        Note::B4 => 2,
+        Note::C5 => 3,
+        Note::CS5 => 4,
+        Note::D5 => 5,
+        Note::DS5 => 6,
+        Note::E5 => 7,
+        Note::F5 => 8,
+        Note::FS5 => 9,
+        Note::G5 => 10,
+        Note::GS5 => 11,
+        Note::A5 => 12,
+        Note::AS5 => 13,
+        Note::B5 => 14,
+        Note::C6 => 15,
+        Note::CS6 => 16,
+        Note::D6 => 17,
+        Note::DS6 => 18,
+        Note::E6 => 19,
+        Note::F6 => 20,
+        Note::FS6 => 21,
+        Note::G6 => 22,
+        Note::GS6 => 23,
+        Note::A6 => 24,
+        Note::AS6 => 25,
+        Note::B6 => 26,
+        Note::C7 => 27,
+        Note::CS7 => 28,
+        Note::D7 => 29,
+        Note::DS7 => 30,
+        Note::E7 => 31,
+        Note::F7 => 32,
+        Note::FS7 => 33,
+        Note::G7 => 34,
+        Note::GS7 => 35,
+        Note::A7 => 36,
+        Note::AS7 => 37,
+        Note::B7 => 38,
+        Note::C8 => 39,
+        Note::CS8 => 40,
+        Note::D8 => 41,
+        Note::DS8 => 42,
+        Note::Rest => return None,
+    })
+}
+
 #[test]
 fn notes_are_equal_tempered_semitones_from_fs3() {
-    // FS3 is 15 semitones below A4 = 440 Hz; each note is the next
-    // semitone, rounded to the nearest hertz.
+    // Every note is 440 Hz * 2^(n/12), rounded to the nearest hertz.
     let notes = [
         Note::FS3,
         Note::G3,
@@ -118,15 +183,22 @@ fn notes_are_equal_tempered_semitones_from_fs3() {
         Note::D8,
         Note::DS8,
     ];
-    for (i, note) in notes.iter().enumerate() {
-        let semitones = i as f64 - 15.0;
-        let hz = 440.0 * 2f64.powf(semitones / 12.0);
-        let got = *note as u16 as f64;
+    for note in notes {
+        let n = semitones_from_a4(note).expect("a pitched note");
+        let hz = 440.0 * 2f64.powf(f64::from(n) / 12.0);
+        let got = f64::from(note as u16);
         assert!(
             (got - hz).abs() <= 0.5,
             "{note:?} = {got}, expected {hz:.2}"
         );
     }
+    // The list is every pitched note: consecutive semitones, FS3 to DS8.
+    let offsets: Vec<i32> = notes
+        .iter()
+        .map(|&n| semitones_from_a4(n).unwrap())
+        .collect();
+    assert_eq!(offsets, (-15..=42).collect::<Vec<i32>>());
+    assert_eq!(semitones_from_a4(Note::Rest), None);
     assert_eq!(Note::Rest as u16, 0);
 }
 
