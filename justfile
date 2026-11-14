@@ -1,6 +1,6 @@
 # modulino-driver task runner. `check` and `test` cover the CI rust-checks job;
 # `lint` also runs clippy on tests and examples, which CI does not. The
-# cross-target builds run in CI only.
+# cross-target builds and the MSRV (1.75) check run in CI only.
 
 set dotenv-load := false
 

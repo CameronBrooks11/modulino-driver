@@ -83,12 +83,13 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: "1.75"
-      - name: Enable caching
-        uses: Swatinem/rust-cache@v2
+      # No rust-cache here: its post step runs `cargo metadata`, which 1.75
+      # cannot do for the dev-dependencies, so it would save nothing.
+      # `+1.75` keeps the steps on 1.75 even if setting the default failed.
       - name: Check library
-        run: cargo check --lib
+        run: cargo +1.75 check --lib
       - name: Check library with defmt
-        run: cargo check --lib --features defmt
+        run: cargo +1.75 check --lib --features defmt
 
   security_audit:
     name: Security Audit
