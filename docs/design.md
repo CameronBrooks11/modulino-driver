@@ -373,6 +373,7 @@ pub enum Error<E> {
     I2c(E),
     NotFound,
     WrongIdentity { expected: Kind, got: u8 },
+    WrongChip { expected: ChipKind, got: Option<u8> },
     FrameLength { expected: usize, got: usize },
     ReservedPrefix,
     InvalidAddress,
@@ -382,6 +383,9 @@ pub enum Error<E> {
 }
 ```
 
+`WrongIdentity` is a node whose strap byte belongs to another kind;
+`WrongChip` is something at a chip's address that fails the chip's
+identity check, with the identity byte where the check reads one.
 `InvalidParameter` from 0.3 folds into `OutOfRange`, and `DeviceNotFound`
 becomes `NotFound`. `DataError` stays, narrowed to a reply the protocol
 does not define (the LED matrix reports its mode as `MON` or `GS4`; anything
