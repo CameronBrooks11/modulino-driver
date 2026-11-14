@@ -21,7 +21,11 @@ use crate::Error;
 /// - `step`, `hold` and `release_coils` cancel a move in progress
 ///   (motors.c:513-518).
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::{MotorMode, Motors};
 ///
 /// let mut motors = Motors::new(i2c);
@@ -29,6 +33,8 @@ use crate::Error;
 /// motors.set_mode(MotorMode::Dc)?;
 /// motors.set_speeds(16384, -16384)?;
 /// let status = motors.status()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Motors<I2C> {

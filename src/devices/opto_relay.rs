@@ -10,13 +10,19 @@ use crate::Error;
 
 /// Driver for the Modulino Opto Relay module.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::OptoRelay;
 ///
 /// let mut relay = OptoRelay::new(i2c);
 /// relay.verify()?;
 /// relay.on()?;
 /// assert!(relay.is_on()?);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct OptoRelay<I2C> {

@@ -107,7 +107,11 @@ impl From<Note> for u16 {
 
 /// Driver for the Modulino Buzzer module.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::{Buzzer, Note};
 ///
 /// let mut buzzer = Buzzer::new(i2c);
@@ -115,6 +119,8 @@ impl From<Note> for u16 {
 /// buzzer.tone(440, 500)?;
 /// buzzer.play_note(Note::C5, 1000)?;
 /// buzzer.no_tone()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Buzzer<I2C> {

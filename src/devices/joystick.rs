@@ -10,12 +10,18 @@ use crate::Error;
 
 /// Driver for the Modulino Joystick module.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Joystick;
 ///
 /// let mut joystick = Joystick::new(i2c);
 /// joystick.verify()?;
 /// let state = joystick.read()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Joystick<I2C> {

@@ -18,7 +18,11 @@ use crate::Error;
 /// `verify()` to read it again. Switching mode leaves the old picture
 /// reinterpreted on screen until the next one is shown (matrix.c:174-181).
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::{LedMatrix, MatrixMode};
 ///
 /// let mut matrix = LedMatrix::new(i2c);
@@ -27,6 +31,8 @@ use crate::Error;
 /// picture[0][0] = true;
 /// matrix.set_mode(MatrixMode::Mono)?;
 /// matrix.show_mono(&picture)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct LedMatrix<I2C> {

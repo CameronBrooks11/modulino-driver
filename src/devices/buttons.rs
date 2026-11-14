@@ -10,7 +10,11 @@ use crate::Error;
 
 /// Driver for the Modulino Buttons module.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::Buttons;
 ///
 /// let mut buttons = Buttons::new(i2c);
@@ -18,6 +22,8 @@ use crate::Error;
 /// let state = buttons.read()?;
 /// buttons.set_leds(state.a, state.b, state.c)?;
 /// let i2c = buttons.release();
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Buttons<I2C> {

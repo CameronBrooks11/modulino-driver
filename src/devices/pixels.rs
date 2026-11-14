@@ -15,13 +15,19 @@ use crate::{Color, Error};
 /// frame on the host: the `set` calls change it and [`Pixels::show`] sends
 /// it.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::{Color, Pixels};
 ///
 /// let mut pixels = Pixels::new(i2c);
 /// pixels.verify()?;
 /// pixels.set(0, Color::RED, 50)?;
 /// pixels.show()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Pixels<I2C> {

@@ -14,13 +14,19 @@ use crate::Error;
 ///
 /// Its factory address is 0x02, below the range many scanners probe.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::LatchRelay;
 ///
 /// let mut relay = LatchRelay::new(i2c);
 /// relay.verify()?;
 /// relay.on(&mut delay)?;
 /// assert_eq!(relay.state()?, Some(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct LatchRelay<I2C> {

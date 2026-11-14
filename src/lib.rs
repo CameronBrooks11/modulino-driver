@@ -23,7 +23,11 @@
 //!
 //! ## Example
 //!
-//! ```rust,ignore
+//! ```no_run
+//! # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+//! # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+//! # let i2c = Mock::new(&[]);
+//! # let mut delay = NoopDelay::new();
 //! use modulino_driver::{Pixels, Color};
 //!
 //! // Constructors do no I/O; verify() checks the board's identity
@@ -35,6 +39,8 @@
 //!
 //! // Apply the changes
 //! pixels.show()?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## Features

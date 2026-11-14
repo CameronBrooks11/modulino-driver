@@ -11,13 +11,19 @@ use crate::Error;
 
 /// Driver for the Modulino Vibro module.
 ///
-/// ```rust,ignore
+/// ```no_run
+/// # use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
+/// # fn main() -> Result<(), modulino_driver::Error<embedded_hal::i2c::ErrorKind>> {
+/// # let i2c = Mock::new(&[]);
+/// # let mut delay = NoopDelay::new();
 /// use modulino_driver::{PowerLevel, Vibro};
 ///
 /// let mut vibro = Vibro::new(i2c);
 /// vibro.verify()?;
 /// vibro.on(500, PowerLevel::Medium)?;
 /// vibro.off()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Vibro<I2C> {
