@@ -265,16 +265,13 @@ println!("Temperature: {:.1}°C", temp);
 use modulino_driver::Light;
 
 let mut light = Light::new(i2c);
-light.init()?;
+light.init()?; // verify, then 18x gain, 16-bit, every 25 ms
 
-// Read all color channels and calculations
-let measurement = light.read()?;
-println!("Lux: {:.2}", measurement.lux);
-println!("Color: {}", measurement.color_name()); // e.g. "VIVID RED"
-
-// Access raw RGB and IR channels
-println!("Red: {}, Green: {}, Blue: {}, IR: {}", 
-    measurement.red, measurement.green, measurement.blue, measurement.ir);
+// All four channels from one measurement, and the lux they give
+let reading = light.read()?;
+println!("Lux: {:.2}", reading.lux);
+println!("Red: {}, Green: {}, Blue: {}, IR: {}",
+    reading.red, reading.green, reading.blue, reading.ir);
 ```
 
 ### Example: Opto Relay Control

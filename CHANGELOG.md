@@ -72,6 +72,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   split into `acceleration_ready`/`angular_velocity_ready` and
   `pressure_ready`/`temperature_ready`, and `Pressure::init` now resets
   the chip.
+- `Light` is the new `chips::Ltr381rgb` driver, trimmed to the lux/RGB
+  path (design 4.5). `new_with_address(u8)` is `with_address(Address)`,
+  `verify()` checks `PART_ID` (`WrongChip` where 0.3 returned
+  `DeviceNotFound`), `init()` verifies and starts measuring with 0.3's
+  defaults, and `ready()` reports a new sample (`MAIN_STATUS` bit 3). `read()` returns
+  `LightReading` with all four channels from one 12-byte burst, masked
+  to 20 bits; 0.3 read them in four transactions. `Gain`, `Resolution`
+  and `Rate` (was `MeasurementRate`) live in `chips::ltr381rgb`, with
+  shorter variant names, and `set_config` is `set_timing`.
+  `Resolution::factor` is `time_factor`; `Resolution::max_value` is
+  gone.
 - `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
   `HubPort` that implements `I2c`: each transaction selects the port,
   runs the operations and deselects, even when they fail, so any device
@@ -124,6 +135,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `Light::new_with_address(u8)`, `enable`, `ir`, `raw_lux`, `lux`
+  (use `read`), `LightMeasurement` (now `LightReading`, without
+  `raw_lux`), `ColorName` and `color_name`; `addresses::LIGHT`.
 - `Movement::new_with_address(u8)`, `Movement::acceleration_magnitude`
   and `Movement::gyro`; `MovementValues` with its `new`, `magnitude` and
   tuple conversions; `Pressure::reset`; `addresses::MOVEMENT`/`PRESSURE`;
