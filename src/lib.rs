@@ -19,7 +19,7 @@
 //! - [`Pressure`] - Barometric pressure and temperature sensor
 //! - [`Light`] - RGB and ambient light sensor
 //! - [`OptoRelay`] - Solid-state relay module
-//! - [`Hub`] - TCA9548A I2C multiplexer
+//! - [`Hub`] - TCA9548A I2C multiplexer; each [`HubPort`] is an I2C bus
 //! - [`Motors`] - Dual DC or stepper motor driver (experimental)
 //!
 //! ## Example
@@ -115,7 +115,4 @@ pub mod addresses {
 
     /// Default address for Modulino Pressure
     pub const PRESSURE: u8 = 0x5C;
-
-    /// Default address for Modulino Hub (0x70)
-    pub const HUB: u8 = 0x70;
 }

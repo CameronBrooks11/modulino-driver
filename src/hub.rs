@@ -1,89 +1,137 @@
-//! Modulino Hub driver.
+//! Hub routing: the Modulino Hub's ports as I2C buses.
 //!
-//! The Modulino Hub is based on the TCA9548A I2C multiplexer. It allows connecting
-//! multiple Modulino modules (even those sharing the same I2C address) to different ports
-//! (0 to 7) of the Hub.
+//! The Modulino Hub is a TCA9548A multiplexer at 0x70-0x77 (A0-A2 straps).
+//! Its single control byte has bit `n` set while port `n` is connected to
+//! the upstream bus. [`HubPort`] implements [`I2c`], so every device in this
+//! crate works behind a hub with no code of its own: each transaction
+//! selects the port, runs the device's operations and deselects again, even
+//! when the operations fail. Nothing is cached, because anything else on the
+//! bus may have changed the control byte.
 //!
-//! For more details, see:
-//! - [Arduino Store Page](https://store-usa.arduino.cc/products/modulino-hub)
-//! - [Official Hardware Documentation](https://docs.arduino.cc/hardware/modulino-hub/)
+//! The port borrows the whole upstream bus for the length of a transaction,
+//! through a [`RefCell`]. That makes select, operations and deselect one
+//! unit in a single execution context; sharing the bus between tasks or
+//! interrupts needs a lock and is not supported yet. Devices on the upstream
+//! bus itself can share the same `RefCell`, for example through
+//! `embedded_hal_bus::i2c::RefCellDevice`.
 
-use crate::Result;
-use embedded_hal::i2c::I2c;
+use core::cell::RefCell;
 
-/// Default address for the TCA9548A multiplexer (0x70).
-pub const DEFAULT_ADDRESS: u8 = crate::addresses::HUB;
+use embedded_hal::i2c::{ErrorType, I2c, Operation};
 
-/// Driver for the Modulino Hub (TCA9548A I2C multiplexer).
-pub struct Hub<I2C> {
-    i2c: I2C,
-    address: u8,
+use crate::addr::Address;
+
+/// The lowest hub address (A0-A2 low).
+pub const HUB_MIN_ADDRESS: u8 = 0x70;
+/// The highest hub address (A0-A2 high).
+pub const HUB_MAX_ADDRESS: u8 = 0x77;
+/// Ports per hub.
+pub const PORTS: u8 = 8;
+
+/// A Modulino Hub on a shared bus.
+///
+/// ```rust,ignore
+/// use core::cell::RefCell;
+/// use modulino_driver::{Buttons, Hub};
+///
+/// let bus = RefCell::new(i2c);
+/// let hub = Hub::new(&bus);
+/// let mut left = Buttons::new(hub.port(0).unwrap());
+/// let mut right = Buttons::new(hub.port(1).unwrap());
+/// left.set_leds(true, false, false)?;
+/// right.set_leds(false, false, true)?;
+/// ```
+#[derive(Debug)]
+pub struct Hub<'a, B> {
+    bus: &'a RefCell<B>,
+    addr: Address,
 }
 
-impl<I2C, E> Hub<I2C>
-where
-    I2C: I2c<Error = E>,
-{
-    /// Create a new Hub instance with the default address (0x70).
-    pub fn new(i2c: I2C) -> Self {
-        Self::new_with_address(i2c, DEFAULT_ADDRESS)
+impl<B> Clone for Hub<'_, B> {
+    fn clone(&self) -> Self {
+        *self
     }
+}
 
-    /// Create a new Hub instance with a custom address.
-    pub fn new_with_address(i2c: I2C, address: u8) -> Self {
-        Self { i2c, address }
-    }
+impl<B> Copy for Hub<'_, B> {}
 
-    /// Select an active port channel (0 to 7).
-    ///
-    /// This enables the specified channel and disables all others.
-    pub fn select(&mut self, port: u8) -> Result<(), E> {
-        if port >= 8 {
-            return Err(crate::Error::InvalidParameter);
+impl<'a, B: I2c> Hub<'a, B> {
+    /// The hub at its default address, 0x70. Does no I/O.
+    pub fn new(bus: &'a RefCell<B>) -> Self {
+        Self {
+            bus,
+            addr: Address::new(HUB_MIN_ADDRESS).expect("0x70 is a device address"),
         }
-        let control_byte = 1 << port;
-        self.i2c
-            .write(self.address, &[control_byte])
-            .map_err(crate::Error::I2c)
     }
 
-    /// Clear/deselect all port channels.
+    /// The hub at `addr`, which must be 0x70-0x77. Does no I/O.
+    pub fn with_address(bus: &'a RefCell<B>, addr: Address) -> Option<Self> {
+        (HUB_MIN_ADDRESS..=HUB_MAX_ADDRESS)
+            .contains(&addr.get())
+            .then_some(Self { bus, addr })
+    }
+
+    /// The hub's address.
+    pub fn address(&self) -> Address {
+        self.addr
+    }
+
+    /// Port `port` (0-7) as a bus. Does no I/O.
+    pub fn port(&self, port: u8) -> Option<HubPort<'a, B>> {
+        (port < PORTS).then(|| HubPort {
+            hub: *self,
+            mask: 1 << port,
+        })
+    }
+}
+
+/// One port of a [`Hub`], usable anywhere an [`I2c`] bus is.
+#[derive(Debug)]
+pub struct HubPort<'a, B> {
+    hub: Hub<'a, B>,
+    mask: u8,
+}
+
+impl<B> Clone for HubPort<'_, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B> Copy for HubPort<'_, B> {}
+
+impl<B: I2c> HubPort<'_, B> {
+    /// The port number, 0-7.
+    pub fn port(&self) -> u8 {
+        self.mask.trailing_zeros() as u8
+    }
+
+    /// The hub this port belongs to.
+    pub fn hub_address(&self) -> Address {
+        self.hub.addr
+    }
+}
+
+impl<B: I2c> ErrorType for HubPort<'_, B> {
+    type Error = B::Error;
+}
+
+impl<B: I2c> I2c for HubPort<'_, B> {
+    /// Select the port, run `operations`, deselect. The deselect runs even
+    /// if the operations fail; their error is returned first.
     ///
-    /// This disables all I2C channels on the multiplexer.
-    pub fn clear(&mut self) -> Result<(), E> {
-        self.i2c
-            .write(self.address, &[0x00])
-            .map_err(crate::Error::I2c)
-    }
-
-    /// Release the I2C bus.
-    pub fn release(self) -> I2C {
-        self.i2c
-    }
-}
-
-/// A helper representing a specific port of the Hub.
-pub struct HubPort<'a, I2C> {
-    hub: &'a mut Hub<I2C>,
-    port: u8,
-}
-
-impl<'a, I2C, E> HubPort<'a, I2C>
-where
-    I2C: I2c<Error = E>,
-{
-    /// Create a new HubPort.
-    pub fn new(hub: &'a mut Hub<I2C>, port: u8) -> Self {
-        Self { hub, port }
-    }
-
-    /// Enable this port channel on the multiplexer.
-    pub fn select(&mut self) -> Result<(), E> {
-        self.hub.select(self.port)
-    }
-
-    /// Disable all port channels on the multiplexer.
-    pub fn clear(&mut self) -> Result<(), E> {
-        self.hub.clear()
+    /// Panics if the bus is already borrowed, which happens only if the same
+    /// `RefCell` is used re-entrantly in one context.
+    fn transaction(
+        &mut self,
+        address: u8,
+        operations: &mut [Operation<'_>],
+    ) -> Result<(), Self::Error> {
+        let mut bus = self.hub.bus.borrow_mut();
+        let hub = self.hub.addr.get();
+        bus.write(hub, &[self.mask])?;
+        let result = bus.transaction(address, operations);
+        let deselect = bus.write(hub, &[0]);
+        result.and(deselect)
     }
 }

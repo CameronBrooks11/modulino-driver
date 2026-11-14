@@ -60,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `codec::motors::current_ma` converts currents, and `Motors::MAX_SPEED`
     becomes `codec::motors::MAX_DC_SPEED`.
 - `Error::DataError` now means a reply the protocol does not define.
+- `Hub` is a handle on a `&RefCell` bus and `Hub::port(n)` returns a
+  `HubPort` that implements `I2c`: each transaction selects the port,
+  runs the operations and deselects, even when they fail, so any device
+  works behind a hub unchanged. A `HubPort` can carry a further hub.
+  `Hub::select`/`clear`/`release`, `HubPort::new(&mut Hub, port)` and
+  `addresses::HUB` are gone. Single execution context only for now.
 
 ### Added
 
