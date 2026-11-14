@@ -30,6 +30,9 @@ pub struct FakeNode {
     pub strap: u8,
     /// Bytes sent after the strap byte.
     pub payload: Vec<u8>,
+    /// Payloads for the next reads, oldest first; each read takes one and
+    /// makes it the new `payload`.
+    pub queued: std::collections::VecDeque<Vec<u8>>,
     /// The only write length the board processes.
     pub write_len: usize,
     /// Every frame the board processed, oldest first.
@@ -47,6 +50,7 @@ impl FakeNode {
             addr: strap >> 1,
             strap,
             payload: payload.to_vec(),
+            queued: Default::default(),
             write_len,
             frames: Vec::new(),
             dropped: 0,
@@ -60,7 +64,10 @@ impl FakeNode {
         self
     }
 
-    fn read(&self, buf: &mut [u8]) {
+    fn read(&mut self, buf: &mut [u8]) {
+        if let Some(next) = self.queued.pop_front() {
+            self.payload = next;
+        }
         for (i, b) in buf.iter_mut().enumerate() {
             *b = match i {
                 0 => self.strap,

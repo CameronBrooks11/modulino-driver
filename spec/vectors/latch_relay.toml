@@ -1,0 +1,26 @@
+# Codec vectors for Modulino Latch Relay (spec/nodes.toml kind "latch_relay").
+#
+# encode: set (true) or reset (false) -> [command, 0, 0] (main.c:315-323).
+# decode: read payload [PA2, PA3, 0] (main.c:501-505) -> "off" when PA2 is
+# high (after a reset), "on" when only PA3 is high (after a set), "unknown"
+# when neither (no command since power-up), as Arduino_Modulino's getStatus.
+
+[[encode]]
+args = { on = true }
+expect = [0x01, 0x00, 0x00]
+
+[[encode]]
+args = { on = false }
+expect = [0x00, 0x00, 0x00]
+
+[[decode]]
+input = [0x00, 0x00, 0x00]
+expect = "unknown"
+
+[[decode]]
+input = [0x01, 0x00, 0x00]
+expect = "off"
+
+[[decode]]
+input = [0x00, 0x01, 0x00]
+expect = "on"

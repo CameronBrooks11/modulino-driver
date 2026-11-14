@@ -1,0 +1,21 @@
+# Codec vectors for Modulino Vibro (spec/nodes.toml kind "vibro").
+#
+# encode_on: duration (ms) and power (duty %, 0-100) -> 12-byte frame of
+# frequency 1000 Hz, duration, duty, each u32 LE (main.c:284-297).
+# encode_off: the full 12 zero bytes. Arduino_Modulino and modulino-rs 0.3
+# sent 8, which the firmware drops (main.c:548-549).
+
+[[encode_on]]
+args = { duration_ms = 500, power = 35 }
+expect = [0xE8, 0x03, 0x00, 0x00, 0xF4, 0x01, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00]
+
+[[encode_on]]
+args = { duration_ms = 0, power = 100 }
+expect = [0xE8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00]
+
+[[encode_on]]
+args = { duration_ms = 500, power = 101 }
+error = "out_of_range"
+
+[[encode_off]]
+expect = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]

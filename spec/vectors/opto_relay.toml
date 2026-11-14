@@ -1,0 +1,20 @@
+# Codec vectors for Modulino Opto Relay (spec/nodes.toml kind "opto_relay").
+#
+# encode: relay state -> [state, 0, 0] (main.c:312-314).
+# decode: read payload -> relay pin (main.c:496-500).
+
+[[encode]]
+args = { on = true }
+expect = [0x01, 0x00, 0x00]
+
+[[encode]]
+args = { on = false }
+expect = [0x00, 0x00, 0x00]
+
+[[decode]]
+input = [0x01, 0x00, 0x00]
+expect = true
+
+[[decode]]
+input = [0x00, 0x00, 0x00]
+expect = false

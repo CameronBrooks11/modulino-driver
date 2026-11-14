@@ -57,14 +57,12 @@ modulino-driver = { git = "https://github.com/CameronBrooks11/modulino-driver" }
 ```rust
 use modulino_driver::{Pixels, Color};
 
-// Create a Pixels instance with your I2C bus
-let mut pixels = Pixels::new(i2c)?;
+let mut pixels = Pixels::new(i2c);
+pixels.verify()?;
 
-// Set the first LED to red at 50% brightness
-pixels.set_color(0, Color::RED, 50)?;
-
-// Set all LEDs to blue
-pixels.set_all_color(Color::BLUE, 25)?;
+// Set all LEDs to blue at 25% brightness, then the first to red at 50%
+pixels.set_all(Color::BLUE, 25)?;
+pixels.set(0, Color::RED, 50)?;
 
 // Apply the changes
 pixels.show()?;
@@ -91,9 +89,9 @@ loop {
 ```rust
 use modulino_driver::{Buzzer, Note};
 
-let mut buzzer = Buzzer::new(i2c)?;
+let mut buzzer = Buzzer::new(i2c);
 
-// Play a tone at 440 Hz for 500ms
+// Play a tone at 440 Hz for 500 ms (below 180 Hz is OutOfRange)
 buzzer.tone(440, 500)?;
 
 // Play a musical note
@@ -136,15 +134,14 @@ println!("Distance: {} mm", mm);
 ```rust
 use modulino_driver::Knob;
 
-let mut knob = Knob::new(i2c)?;
+let mut knob = Knob::new(i2c);
 
-// Set a range for the encoder value
-knob.set_range(-100, 100);
+// Call the current position 0; the offset is kept on the host
+knob.set_position(0)?;
 
 loop {
-    if knob.update()? {
-        println!("Value: {}, Pressed: {}", knob.value(), knob.pressed());
-    }
+    let state = knob.read()?;
+    println!("Position: {}, Pressed: {}", state.position, state.pressed);
 }
 ```
 
@@ -153,17 +150,15 @@ loop {
 ```rust
 use modulino_driver::Joystick;
 
-let mut joystick = Joystick::new(i2c)?;
+let mut joystick = Joystick::new(i2c);
 
-// Set custom deadzone
+// Dead zone around the centre, in raw counts (default 26)
 joystick.set_deadzone(15);
 
 loop {
-    joystick.update()?;
-    
-    let (x, y) = joystick.position();
-    if joystick.button_pressed() {
-        println!("Button pressed at ({}, {})", x, y);
+    let state = joystick.read()?;
+    if state.pressed {
+        println!("Button pressed at ({}, {})", state.x, state.y);
     }
 }
 ```
@@ -173,13 +168,16 @@ loop {
 ```rust
 use modulino_driver::{Vibro, PowerLevel};
 
-let mut vibro = Vibro::new(i2c)?;
+let mut vibro = Vibro::new(i2c);
 
 // Vibrate at medium power for 500ms
 vibro.on(500, PowerLevel::Medium)?;
 
 // Or use a custom power level (0-100)
 vibro.on_with_power(1000, 60)?;
+
+// Stop
+vibro.off()?;
 ```
 
 ### Example: Relay Control
@@ -187,13 +185,14 @@ vibro.on_with_power(1000, 60)?;
 ```rust
 use modulino_driver::LatchRelay;
 
-let mut relay = LatchRelay::new(i2c)?;
+// Factory address 0x02
+let mut relay = LatchRelay::new(i2c);
 
-// Turn on the relay
+// Set the relay
 relay.on()?;
 
-// Check state
-if relay.is_on()? == Some(true) {
+// Last commanded state; None until the first command after power-up
+if relay.state()? == Some(true) {
     println!("Relay is ON");
 }
 
@@ -271,13 +270,11 @@ println!("Red: {}, Green: {}, Blue: {}, IR: {}",
 ```rust
 use modulino_driver::OptoRelay;
 
-let mut relay = OptoRelay::new(i2c)?;
+let mut relay = OptoRelay::new(i2c);
 
-// Turn on the opto relay
+// Turn on the opto relay and read it back
 relay.on()?;
-
-// Toggle state
-relay.toggle()?;
+assert!(relay.is_on()?);
 
 // Turn off
 relay.off()?;

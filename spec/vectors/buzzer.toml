@@ -1,0 +1,34 @@
+# Codec vectors for Modulino Buzzer (spec/nodes.toml kind "buzzer").
+#
+# encode_tone: frequency (Hz) and duration (ms) -> 8-byte frame, both u32 LE
+# (main.c:262-283). Below 180 Hz the firmware's 16-bit timer period
+# 0xFFFF * 180 / f overflows, so the codec refuses it. Duration 0 plays
+# until the next frame.
+# encode_stop: frequency 0, duration 0, which the firmware treats as stop.
+# `node = "reserved_prefix"` marks a frame the node layer refuses because
+# the firmware would execute it as a command: 17987 = 0x4643 encodes as
+# "CF", an address change to 0x00.
+
+[[encode_tone]]
+args = { frequency_hz = 440, duration_ms = 500 }
+expect = [0xB8, 0x01, 0x00, 0x00, 0xF4, 0x01, 0x00, 0x00]
+
+[[encode_tone]]
+args = { frequency_hz = 180, duration_ms = 0 }
+expect = [0xB4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+
+[[encode_tone]]
+args = { frequency_hz = 179, duration_ms = 100 }
+error = "out_of_range"
+
+[[encode_tone]]
+args = { frequency_hz = 0, duration_ms = 100 }
+error = "out_of_range"
+
+[[encode_tone]]
+args = { frequency_hz = 17987, duration_ms = 1000 }
+expect = [0x43, 0x46, 0x00, 0x00, 0xE8, 0x03, 0x00, 0x00]
+node = "reserved_prefix"
+
+[[encode_stop]]
+expect = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]

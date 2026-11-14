@@ -1,0 +1,39 @@
+# Codec vectors for Modulino Joystick (spec/nodes.toml kind "joystick").
+#
+# decode: read payload -> raw X, raw Y (0-255, 128 at rest), pressed
+# (main.c:491-495).
+# to_state: raw reading and dead zone -> axes centred as Arduino_Modulino's
+# getX/getY (128 - raw, clamped to i8), and (0, 0) while both raw values are
+# strictly within the dead zone of 128 (its map_value).
+
+[[decode]]
+input = [0x80, 0x80, 0x00]
+expect = { x = 128, y = 128, pressed = false }
+
+[[decode]]
+input = [0x00, 0xFF, 0x01]
+expect = { x = 0, y = 255, pressed = true }
+
+[[to_state]]
+args = { x = 128, y = 128, pressed = false, deadzone = 26 }
+expect = { x = 0, y = 0, pressed = false }
+
+[[to_state]]
+args = { x = 0, y = 255, pressed = true, deadzone = 26 }
+expect = { x = 127, y = -127, pressed = true }
+
+[[to_state]]
+args = { x = 140, y = 120, pressed = false, deadzone = 26 }
+expect = { x = 0, y = 0, pressed = false }
+
+[[to_state]]
+args = { x = 160, y = 128, pressed = false, deadzone = 26 }
+expect = { x = -32, y = 0, pressed = false }
+
+[[to_state]]
+args = { x = 154, y = 128, pressed = false, deadzone = 26 }
+expect = { x = -26, y = 0, pressed = false }
+
+[[to_state]]
+args = { x = 140, y = 128, pressed = false, deadzone = 0 }
+expect = { x = -12, y = 0, pressed = false }

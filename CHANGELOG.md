@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   becomes `with_address(i2c, Address)`, and `address()` returns
   `Address`. `ButtonState` moves to `codec::buttons`.
 - `Error` is `#[non_exhaustive]`.
+- `Buzzer`, `Vibro`, `Knob`, `Pixels`, `Joystick`, `OptoRelay` and
+  `LatchRelay` are rebuilt on the node core with pure codecs, in the same
+  shape as `Buttons`: `new`/`with_address(Address)` do no I/O,
+  `verify()`, and reads return values or errors, never cached state.
+  - `Buzzer::tone` and `Vibro::on` take `u32` values; a tone with
+    duration 0 plays until the next call.
+  - `Knob::set_position` keeps the offset on the host and never writes
+    the board; `read()` returns `KnobState`.
+  - `Pixels::set`/`set_all` replace `set_color`/`set_all_color`.
+  - `Joystick::read()` returns `JoystickState` centred on zero (raw 0 now
+    gives 127 rather than overflowing); `read_raw()` gives the ADC values.
+  - `OptoRelay::is_on()` and `LatchRelay::state()` read the board.
 
 ### Added
 
@@ -28,11 +40,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frames starting `CF` or `DIE`.
 - `Error::WrongIdentity`, `Error::FrameLength`, `Error::ReservedPrefix`.
 
+### Fixed
+
+- `Vibro::off` sends the full 12-byte frame. 0.3 sent 8 bytes, which the
+  firmware drops (main.c:548-549), so the motor kept running.
+- A Buzzer frequency whose frame starts with `CF` or `DIE` (17987 Hz is
+  `CF`) is refused instead of being executed by the firmware as an
+  address change or bootloader jump.
+
 ### Removed
 
 - `ButtonLed`, the `Buttons` LED fields, `update_leds`, `all_leds_on`,
   `all_leds_off`, the cached getters, `Buttons::discover`,
   `addresses::BUTTONS` and `pinstrap::BUTTONS`.
+- `discover()` on every module (scan replaces it), the `pinstrap` module,
+  and the `addresses` entries for the node kinds above.
+- `Buzzer::tone_continuous`/`stop`; `Vibro::set_frequency`/`frequency`/
+  `on_continuous`/`stop`/`pulse`; `Knob::update`/`value`/`set_value`/
+  `reset`/`pressed`/the range and direction helpers; the `Pixels`
+  per-channel, range and brightness-only setters and `set_color_show`;
+  `Joystick::update` and its cached getters, `magnitude` and `angle`;
+  `toggle` and the cached getters on both relays.
 
 ## [0.3.0] - 2026-07-02
 

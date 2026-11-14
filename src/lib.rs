@@ -27,11 +27,12 @@
 //! ```rust,ignore
 //! use modulino_driver::{Pixels, Color};
 //!
-//! // Create a Pixels instance with your I2C bus
-//! let mut pixels = Pixels::new(i2c)?;
+//! // Constructors do no I/O; verify() checks the board's identity
+//! let mut pixels = Pixels::new(i2c);
+//! pixels.verify()?;
 //!
-//! // Set the first LED to red
-//! pixels.set_color(0, Color::RED, 50)?;
+//! // Set the first LED to red at 50% brightness
+//! pixels.set(0, Color::RED, 50)?;
 //!
 //! // Apply the changes
 //! pixels.show()?;
@@ -52,7 +53,6 @@
 #![deny(unsafe_code)]
 
 mod addr;
-mod buzzer;
 pub mod codec;
 mod color;
 mod devices;
@@ -60,79 +60,55 @@ mod distance;
 mod error;
 mod hub;
 mod i2c_device;
-mod joystick;
-mod knob;
-mod latch_relay;
 mod led_matrix;
 mod light;
 mod motors;
 mod movement;
 mod node;
-mod opto_relay;
-mod pixels;
 mod pressure;
 pub mod spec;
 mod thermo;
-mod vibro;
 
 pub use addr::{Address, NewAddress, Strap};
-pub use buzzer::{Buzzer, Note};
 pub use codec::buttons::ButtonState;
+pub use codec::joystick::{JoystickRaw, JoystickState};
+pub use codec::knob::KnobRaw;
+pub use codec::vibro::PowerLevel;
 pub use color::Color;
 pub use devices::buttons::Buttons;
+pub use devices::buzzer::{Buzzer, Note};
+pub use devices::joystick::Joystick;
+pub use devices::knob::{Knob, KnobState};
+pub use devices::latch_relay::LatchRelay;
+pub use devices::opto_relay::OptoRelay;
+pub use devices::pixels::Pixels;
+pub use devices::vibro::Vibro;
 pub use distance::Distance;
 pub use error::{Error, Result};
 pub use hub::{Hub, HubPort};
 pub use i2c_device::I2cDevice;
-pub use joystick::Joystick;
-pub use knob::Knob;
-pub use latch_relay::LatchRelay;
 pub use led_matrix::{DisplayMode, LedMatrix};
 pub use light::{Gain, Light, LightMeasurement, MeasurementRate, Resolution};
 pub use motors::{DecayMode, Motors};
 pub use movement::{Movement, MovementValues};
 pub use node::Node;
-pub use opto_relay::OptoRelay;
-pub use pixels::Pixels;
 pub use pressure::Pressure;
 pub use spec::Kind;
 pub use thermo::{Hs3003Error, Thermo, ThermoMeasurement};
-pub use vibro::{PowerLevel, Vibro};
 
 /// Default I2C addresses for Modulino devices.
 ///
 /// These are the factory-default 7-bit I2C addresses. Some modules support
 /// multiple addresses via hardware configuration (solder jumpers).
 pub mod addresses {
-    /// Default address for Modulino Buzzer (0x3C >> 1 = 0x1E)
-    pub const BUZZER: u8 = 0x1E;
-
-    /// Default address for Modulino Pixels (0x6C >> 1 = 0x36)
-    pub const PIXELS: u8 = 0x36;
-
     /// Default address for Modulino Distance
     pub const DISTANCE: u8 = 0x29;
 
     /// Default addresses for Modulino Movement (configurable via solder jumper)
     pub const MOVEMENT: [u8; 2] = [0x6A, 0x6B];
 
-    /// Default addresses for Modulino Knob (two possible addresses)
-    pub const KNOB: [u8; 2] = [0x3A, 0x3B]; // 0x74 >> 1, 0x76 >> 1
-
     /// Default address for Modulino Thermo
     pub const THERMO: u8 = 0x44;
-
-    /// Default address for Modulino Joystick (0x58 >> 1 = 0x2C)
-    pub const JOYSTICK: u8 = 0x2C;
-
-    /// Default address for Modulino Latch Relay (0x04 >> 1 = 0x02)
-    pub const LATCH_RELAY: u8 = 0x02;
-
-    /// Default address for Modulino Opto Relay (0x28 >> 1 = 0x14)
-    pub const OPTO_RELAY: u8 = 0x14;
-
-    /// Default address for Modulino Vibro (0x70 >> 1 = 0x38)
-    pub const VIBRO: u8 = 0x38;
 
     /// Default address for Modulino Light
     pub const LIGHT: u8 = 0x53;
@@ -148,34 +124,4 @@ pub mod addresses {
 
     /// Default address for Modulino Motors (0x48 >> 1 = 0x24)
     pub const MOTORS: u8 = 0x24;
-}
-
-/// Pinstrap address map for device type detection.
-///
-/// When reading from a Modulino with a microcontroller, the first byte
-/// returned is always the pinstrap address, which identifies the device type.
-pub mod pinstrap {
-    /// Pinstrap address for Buzzer
-    pub const BUZZER: u8 = 0x3C;
-
-    /// Pinstrap addresses for Knob
-    pub const KNOB: [u8; 2] = [0x76, 0x74];
-
-    /// Pinstrap address for Pixels
-    pub const PIXELS: u8 = 0x6C;
-
-    /// Pinstrap address for Joystick
-    pub const JOYSTICK: u8 = 0x58;
-
-    /// Pinstrap address for Latch Relay
-    pub const LATCH_RELAY: u8 = 0x04;
-
-    /// Pinstrap address for Opto Relay
-    pub const OPTO_RELAY: u8 = 0x28;
-
-    /// Pinstrap address for Vibro
-    pub const VIBRO: u8 = 0x70;
-
-    /// Pinstrap address for Motors
-    pub const MOTORS: u8 = 0x48;
 }

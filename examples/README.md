@@ -24,8 +24,8 @@ async fn main(_spawner: Spawner) {
     
     let i2c = I2c::new_blocking(p.I2C0, p.PIN_1, p.PIN_0, Config::default());
     
-    let mut pixels = Pixels::new(i2c).unwrap();
-    pixels.set_all_color(Color::RED, 50);
+    let mut pixels = Pixels::new(i2c);
+    pixels.set_all(Color::RED, 50).unwrap();
     pixels.show().unwrap();
 }
 ```
@@ -51,7 +51,7 @@ fn main() -> ! {
         &clocks,
     );
     
-    let mut buzzer = Buzzer::new(i2c).unwrap();
+    let mut buzzer = Buzzer::new(i2c);
     buzzer.play_note(Note::C5, 500).unwrap();
     
     loop {}

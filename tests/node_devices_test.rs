@@ -1,0 +1,157 @@
+//! Every node device from M2 against the simulated firmware.
+
+mod support;
+
+use modulino_driver::{
+    Address, Buzzer, Color, Error, Joystick, JoystickState, Kind, Knob, KnobState, LatchRelay,
+    Note, OptoRelay, Pixels, PowerLevel, Vibro,
+};
+use support::{FakeBus, FakeNode};
+
+fn bus(strap: u8, payload: &[u8], write_len: usize) -> FakeBus {
+    FakeBus::new(vec![FakeNode::new(strap, payload, write_len)])
+}
+
+#[test]
+fn constructors_do_no_io() {
+    let empty = FakeBus::default;
+    assert_eq!(Buzzer::new(empty()).release().transactions, 0);
+    assert_eq!(Vibro::new(empty()).release().transactions, 0);
+    assert_eq!(Knob::new(empty()).release().transactions, 0);
+    assert_eq!(Pixels::new(empty()).release().transactions, 0);
+    assert_eq!(Joystick::new(empty()).release().transactions, 0);
+    assert_eq!(OptoRelay::new(empty()).release().transactions, 0);
+    assert_eq!(LatchRelay::new(empty()).release().transactions, 0);
+}
+
+#[test]
+fn buzzer_plays_and_stops() {
+    let mut buzzer = Buzzer::new(bus(0x3C, &[0; 3], 8));
+    buzzer.verify().unwrap();
+    buzzer.tone(440, 500).unwrap();
+    buzzer.play_note(Note::A4, 250).unwrap();
+    buzzer.play_note(Note::Rest, 0).unwrap();
+    let bus = buzzer.release();
+    assert_eq!(
+        bus.node(0x1E).frames,
+        vec![
+            vec![0xB8, 0x01, 0, 0, 0xF4, 0x01, 0, 0],
+            vec![0xB8, 0x01, 0, 0, 0xFA, 0x00, 0, 0],
+            vec![0; 8],
+        ]
+    );
+}
+
+#[test]
+fn buzzer_refuses_what_the_firmware_cannot_play() {
+    let mut buzzer = Buzzer::new(bus(0x3C, &[0; 3], 8));
+    assert_eq!(buzzer.tone(179, 100), Err(Error::OutOfRange));
+    // 17987 Hz encodes as "CF": sent raw, it would readdress the board.
+    assert_eq!(buzzer.tone(17987, 100), Err(Error::ReservedPrefix));
+    let bus = buzzer.release();
+    let board = bus.node(0x1E);
+    assert!(board.frames.is_empty());
+    assert_eq!(board.address_changes, 0);
+}
+
+#[test]
+fn vibro_off_sends_the_full_frame() {
+    let mut vibro = Vibro::new(bus(0x70, &[0; 3], 12));
+    vibro.on(500, PowerLevel::Medium).unwrap();
+    vibro.off().unwrap();
+    let bus = vibro.release();
+    let board = bus.node(0x38);
+    // The motor stops only if the board processed the off frame.
+    assert_eq!(board.frames.last(), Some(&vec![0u8; 12]));
+    assert_eq!((board.frames.len(), board.dropped), (2, 0));
+}
+
+#[test]
+fn vibro_power_is_a_percentage() {
+    let mut vibro = Vibro::new(bus(0x70, &[0; 3], 12));
+    assert_eq!(vibro.on_with_power(100, 101), Err(Error::OutOfRange));
+    vibro.on_with_power(100, 100).unwrap();
+}
+
+#[test]
+fn knob_offset_lives_on_the_host() {
+    let mut board = FakeNode::new(0x74, &[0; 3], 4);
+    board.queued.extend([vec![10, 0, 0], vec![15, 0, 1]]);
+    let mut knob = Knob::new(FakeBus::new(vec![board]));
+    assert_eq!(knob.address().get(), 0x3A);
+
+    knob.set_position(0).unwrap();
+    assert_eq!(
+        knob.read().unwrap(),
+        KnobState {
+            position: 5,
+            pressed: true
+        }
+    );
+    let bus = knob.release();
+    let board = bus.node(0x3A);
+    assert_eq!((board.frames.len(), board.dropped), (0, 0), "no writes");
+}
+
+#[test]
+fn knob_at_its_second_default_address() {
+    let bus = FakeBus::new(vec![FakeNode::new(0x76, &[0xFE, 0xFF, 0], 4)]);
+    let mut knob = Knob::with_address(bus, Address::new(0x3B).unwrap());
+    assert_eq!(knob.read().unwrap().position, -2);
+}
+
+#[test]
+fn pixels_show_sends_the_whole_frame() {
+    let mut pixels = Pixels::new(bus(0x6C, &[0; 32], 32));
+    pixels.set(0, Color::RED, 100).unwrap();
+    pixels.set(7, Color::new(1, 2, 3), 50).unwrap();
+    assert_eq!(pixels.set(8, Color::RED, 100), Err(Error::OutOfRange));
+    assert_eq!(pixels.set(0, Color::RED, 101), Err(Error::OutOfRange));
+    pixels.show().unwrap();
+    pixels.clear_all();
+    pixels.show().unwrap();
+
+    let bus = pixels.release();
+    let frames = &bus.node(0x36).frames;
+    let mut lit = [0xE0u8, 0, 0, 0].repeat(8);
+    lit[..4].copy_from_slice(&[0xFF, 0, 0, 0xFF]);
+    lit[28..].copy_from_slice(&[0xEF, 3, 2, 1]);
+    assert_eq!(frames[0], lit);
+    assert_eq!(frames[1], [0xE0u8, 0, 0, 0].repeat(8));
+}
+
+#[test]
+fn joystick_reads_centred_axes() {
+    let mut joystick = Joystick::new(bus(0x58, &[0, 255, 1], 3));
+    assert_eq!(
+        joystick.read().unwrap(),
+        JoystickState {
+            x: 127,
+            y: -127,
+            pressed: true
+        }
+    );
+    assert_eq!(joystick.read_raw().unwrap().x, 0);
+}
+
+#[test]
+fn opto_relay_switches_and_reads_back() {
+    let mut relay = OptoRelay::new(bus(0x28, &[1, 0, 0], 3));
+    relay.on().unwrap();
+    relay.off().unwrap();
+    assert!(relay.is_on().unwrap());
+    let bus = relay.release();
+    assert_eq!(bus.node(0x14).frames, vec![vec![1, 0, 0], vec![0, 0, 0]]);
+}
+
+#[test]
+fn latch_relay_answers_at_its_factory_address() {
+    let mut relay = LatchRelay::new(bus(0x04, &[0, 1, 0], 3));
+    assert_eq!(relay.address().get(), 0x02);
+    assert_eq!(relay.address(), Kind::LatchRelay.default_address());
+    relay.verify().unwrap();
+    relay.on().unwrap();
+    assert_eq!(relay.state().unwrap(), Some(true));
+    let bus = relay.release();
+    assert_eq!(bus.node(0x02).frames, vec![vec![1, 0, 0]]);
+}

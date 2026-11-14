@@ -1,0 +1,19 @@
+# Codec vectors for Modulino Knob (spec/nodes.toml kind "knob").
+#
+# decode: read payload -> encoder count (i16 LE) and pressed (main.c:483-488).
+
+[[decode]]
+input = [0x10, 0x00, 0x00]
+expect = { count = 16, pressed = false }
+
+[[decode]]
+input = [0xFF, 0xFF, 0x01]
+expect = { count = -1, pressed = true }
+
+[[decode]]
+input = [0x00, 0x80, 0x00]
+expect = { count = -32768, pressed = false }
+
+[[decode]]
+input = [0xFF, 0x7F, 0x00]
+expect = { count = 32767, pressed = false }
