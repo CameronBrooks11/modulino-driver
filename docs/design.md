@@ -262,7 +262,7 @@ to another language reproduces.
 ### 4.5 Chip drivers (`chips/`)
 
 Minimal register drivers for what each module exposes, written in the crate.
-A starting point ending in `.rs` is a modulino-rs v0.3.0 (`87e091a`) file:
+A `.rs` path in this table is a modulino-rs v0.3.0 (`87e091a`) file:
 
 | Chip | Module | Starting point | Notes |
 |---|---|---|---|
