@@ -501,10 +501,11 @@ restructure.
   and fails on any disagreement with `spec.rs`.
 - A CI job extracts the `NODE_*` constants and `getReceiveBufferSize()`
   lengths from `node_modulino_firmware` at a pinned commit and diffs them
-  against `spec/nodes.toml`. Moving the pin is a deliberate commit, so
-  firmware changes surface as a red check rather than silent drift. The
-  extractor is deliberately narrow; if a firmware refactor breaks it, it is
-  replaced by a reviewed manual check, not widened.
+  against `spec/nodes.toml` (`tests/firmware_drift.rs`, run by the CI
+  `firmware-drift` job and by `just drift`). Moving the pin is a deliberate
+  commit, so firmware changes surface as a red check rather than silent
+  drift. The extractor is deliberately narrow; if a firmware refactor
+  breaks it, it is replaced by a reviewed manual check, not widened.
 
 **Later, if wanted:** replace `src/spec.rs` with output of a `build.rs` or a
 checked-in generator reading the same TOML. Nothing above `spec.rs` changes,
