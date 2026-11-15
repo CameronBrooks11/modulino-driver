@@ -961,11 +961,16 @@ impl SimBus {
     /// Pressure (P_DA and T_DA), Movement (XLDA and GDA) or Distance (its
     /// GPIO level, with the polarity the driver set).
     ///
-    /// A real chip clears its flag until its first measurement ends; here
-    /// the flags stay clear until this is called with `true`. A driver that
-    /// waits on the flag returns [`Error::Timeout`](crate::Error::Timeout)
-    /// while it is held: Distance's `init`, and `start_ranging` on the
-    /// VL53L4CD.
+    /// A real chip keeps its flag clear until its first measurement ends;
+    /// here the flags stay clear until this is called with `true`. Only the
+    /// flag changes: the data registers still read the stored sample, so a
+    /// test sees a missing wait through the flag, not the values.
+    ///
+    /// A driver that waits on the flag returns
+    /// [`Error::Timeout`](crate::Error::Timeout) while it is held:
+    /// Distance's `init`, and `start_ranging` on the VL53L4CD. To test code
+    /// that waits after starting a Distance, hold the flag after
+    /// `start_ranging`, not before `init`.
     pub fn set_ready(&mut self, addr: Address, ready: bool) -> bool {
         match find_chip_mut(&mut self.bus, addr.get()) {
             Some(c) if c.ready_flag.is_some() => {

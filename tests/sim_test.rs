@@ -552,6 +552,15 @@ fn a_held_distance_flag_times_out_its_waits() {
         bus.set_ready(a(0x29), true);
         let mut d = Distance::new(bus);
         assert!(d.data_ready().unwrap(), "{chip:?}");
+
+        // Held after starting: ranging, with no sample yet.
+        let mut d = Distance::new(SimBus::new().with_chip(chip));
+        d.init(&mut delay).unwrap();
+        d.start_ranging(&mut delay).unwrap();
+        let mut bus = d.release();
+        bus.set_ready(a(0x29), false);
+        let mut d = Distance::new(bus);
+        assert!(!d.data_ready().unwrap(), "{chip:?} started");
     }
 }
 
@@ -571,9 +580,18 @@ fn ready_flags_are_held_per_hub_port() {
     let hub = SimHub::new(hub_addr)
         .unwrap()
         .with_port(1, SimBus::new().with_chip(ChipKind::Ltr381rgb))
-        .with_port(2, SimBus::new().with_chip(ChipKind::Ltr381rgb));
+        .with_port(
+            2,
+            SimBus::new()
+                .with_chip(ChipKind::Ltr381rgb)
+                .with_chip(ChipKind::Hs3003),
+        );
     let mut bus = SimBus::new().with_hub(hub);
     assert!(bus.set_ready_at(hub_addr, 1, a(0x53), false));
+    assert!(
+        !bus.set_ready_at(hub_addr, 2, a(0x44), false),
+        "the HS3003 has no flag"
+    );
     assert!(!bus.set_ready_at(hub_addr, 3, a(0x53), false), "empty port");
     let bus = RefCell::new(bus);
     let hub = Hub::new(&bus);
