@@ -18,6 +18,16 @@ embedded-hal = "1.0"
 embedded-hal-mock = "0.11"
 toml = { version = "0.9.6", default-features = false, features = ["parse", "serde"] }
 
+# The bench example talks to real boards through Linux's I2C device files.
+# Only its I2C support: the default serial feature needs libudev.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+linux-embedded-hal = { version = "0.5", default-features = false, features = ["i2c"] }
+
+# Run the bench example's own tests (its bus adapter) under `cargo test`.
+[[example]]
+name = "bench"
+test = true
+
 [features]
 default = []
 # Enable defmt debug formatting
