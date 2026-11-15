@@ -8,7 +8,8 @@ use embedded_hal_mock::eh1::delay::NoopDelay;
 use modulino_driver::sim::{SimBus, SimHub};
 use modulino_driver::{
     Address, Buttons, Buzzer, ChipKind, Distance, Error, Hub, Joystick, Kind, Knob, LatchRelay,
-    LedMatrix, Light, MatrixMode, Motors, Movement, OptoRelay, Pixels, Pressure, Thermo, Vibro,
+    LedMatrix, Light, MatrixMode, MotorMode, Motors, Movement, OptoRelay, Pixels, Pressure, Thermo,
+    Vibro,
 };
 
 fn a(raw: u8) -> Address {
@@ -600,4 +601,91 @@ fn ready_flags_are_held_per_hub_port() {
     // The address-wide method reaches the first one behind a port.
     assert!(bus.borrow_mut().set_ready(a(0x53), true));
     assert!(Light::new(hub.port(1).unwrap()).ready().unwrap());
+}
+
+#[test]
+fn the_motors_status_follows_set_reading() {
+    let mut bus = SimBus::new().with_node(Kind::Motors);
+    let s = Motors::new(bus).status().unwrap();
+    assert!(!s.busy && s.mode == MotorMode::Dc, "{s:?}");
+    bus = SimBus::new().with_node(Kind::Motors);
+    // Current A 0x0010, current B 0x0020, busy and stepper.
+    assert!(bus.set_reading(a(0x24), &[0x10, 0x00, 0x20, 0x00, 0x03]));
+    let s = Motors::new(bus).status().unwrap();
+    assert_eq!((s.current_a_raw, s.current_b_raw), (0x10, 0x20));
+    assert!(s.busy && s.mode == MotorMode::Stepper, "{s:?}");
+}
+
+#[test]
+fn a_read_fault_fails_reads_while_writes_land() {
+    use embedded_hal::i2c::Error as _;
+
+    // The frames a stop and a coil release send, from a bus with no fault.
+    let mut m = Motors::new(SimBus::new().with_node(Kind::Motors));
+    m.stop().unwrap();
+    let stop = m.release().last_write(a(0x24)).unwrap().to_vec();
+    let mut m = Motors::new(SimBus::new().with_node(Kind::Motors));
+    m.release_coils().unwrap();
+    let coils = m.release().last_write(a(0x24)).unwrap().to_vec();
+    assert_ne!(stop, coils);
+
+    let mut bus = SimBus::new().with_node(Kind::Motors);
+    assert!(bus.set_read_fault(a(0x24), Some(ErrorKind::Other)));
+    let mut m = Motors::new(bus);
+    match m.status() {
+        Err(Error::I2c(e)) => {
+            assert_eq!(e.kind(), ErrorKind::Other);
+            assert_eq!(e.address(), 0x24);
+        }
+        other => panic!("{other:?}"),
+    }
+    m.stop().unwrap();
+    assert_eq!(m.release().last_write(a(0x24)), Some(&stop[..]));
+
+    let mut bus = SimBus::new().with_node(Kind::Motors);
+    bus.set_read_fault(a(0x24), Some(ErrorKind::Bus));
+    let mut m = Motors::new(bus);
+    m.release_coils().unwrap();
+    assert!(matches!(m.verify(), Err(Error::I2c(e)) if e.kind() == ErrorKind::Bus));
+    let mut bus = m.release();
+    assert_eq!(bus.last_write(a(0x24)), Some(&coils[..]));
+
+    // Cleared, reads work again; a missing board still NACKs.
+    assert!(bus.set_read_fault(a(0x24), None));
+    assert!(Motors::new(bus).status().is_ok());
+    let err = Motors::new(SimBus::new()).status().unwrap_err();
+    assert!(is_nack(&err), "{err:?}");
+}
+
+#[test]
+fn a_read_fault_reaches_chips_and_hub_ports() {
+    use embedded_hal::i2c::Error as _;
+
+    let mut bus = SimBus::new().with_chip(ChipKind::Ltr381rgb);
+    assert!(bus.set_read_fault(a(0x53), Some(ErrorKind::Other)));
+    assert!(
+        !bus.set_read_fault(a(0x40), Some(ErrorKind::Other)),
+        "nothing there"
+    );
+    let mut l = Light::new(bus);
+    assert!(matches!(l.ready(), Err(Error::I2c(e)) if e.kind() == ErrorKind::Other));
+
+    let hub_addr = a(0x70);
+    let hub = SimHub::new(hub_addr)
+        .unwrap()
+        .with_port(1, SimBus::new().with_node(Kind::Buttons))
+        .with_port(2, SimBus::new().with_node(Kind::Buttons));
+    let mut bus = SimBus::new().with_hub(hub);
+    assert!(bus.set_read_fault_at(hub_addr, 1, a(0x3E), Some(ErrorKind::Other)));
+    assert!(
+        !bus.set_read_fault_at(hub_addr, 3, a(0x3E), Some(ErrorKind::Other)),
+        "empty port"
+    );
+    let bus = RefCell::new(bus);
+    let hub = Hub::new(&bus);
+    assert!(Buttons::new(hub.port(1).unwrap()).read().is_err());
+    assert!(Buttons::new(hub.port(2).unwrap()).read().is_ok());
+    // The address-wide method reaches every board behind every port.
+    assert!(bus.borrow_mut().set_read_fault(a(0x3E), None));
+    assert!(Buttons::new(hub.port(1).unwrap()).read().is_ok());
 }

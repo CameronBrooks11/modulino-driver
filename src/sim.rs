@@ -64,6 +64,8 @@ pub struct FakeNode {
     /// Writes still to fail: the board NACKs each one and processes
     /// nothing, as a busy or resetting board would.
     pub fail_writes: usize,
+    /// Fail every read with this error kind; writes still land.
+    pub read_fault: Option<ErrorKind>,
     /// A `CF` taken and not yet acted on: the new 7-bit address and the log
     /// length when the frame arrived. The board keeps listening at its old
     /// address, since it acts on the command from its main loop
@@ -130,6 +132,7 @@ impl FakeNode {
             long: 0,
             address_changes: 0,
             fail_writes: 0,
+            read_fault: None,
             pending: None,
             cf_lengths: Vec::new(),
             matrix_grayscale: None,
@@ -324,6 +327,8 @@ pub struct FakeChip {
     pub ready_flag: Option<ReadyFlag>,
     /// Hold the data-ready flag at "no data", whatever the registers say.
     pub held: bool,
+    /// Fail every read with this error kind; writes still land.
+    pub read_fault: Option<ErrorKind>,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
@@ -366,6 +371,7 @@ impl FakeChip {
             history: true,
             ready_flag: None,
             held: false,
+            read_fault: None,
             pointer: 0,
             reply: None,
             not_ready: 0,
@@ -600,7 +606,30 @@ impl ErrorType for FakeBus {
 }
 
 impl I2c for FakeBus {
+    /// A read fault set on a board is reported as a NACK here; [`SimBus`]
+    /// reports its kind.
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), Nack> {
+        self.run(address, ops).map_err(|f| Nack(f.address))
+    }
+}
+
+/// A failed transfer: the address and the error kind to report.
+struct Fault {
+    address: u8,
+    kind: ErrorKind,
+}
+
+impl From<Nack> for Fault {
+    fn from(Nack(address): Nack) -> Self {
+        Fault {
+            address,
+            kind: ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address),
+        }
+    }
+}
+
+impl FakeBus {
+    fn run(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), Fault> {
         self.transactions += 1;
         self.settle();
         if let Some(log) = &self.log {
@@ -612,7 +641,7 @@ impl I2c for FakeBus {
         if targets.is_empty()
             || (address == 0 && ops.iter().any(|op| matches!(op, Operation::Read(_))))
         {
-            return Err(Nack(address));
+            return Err(Nack(address).into());
         }
         for op in ops.iter_mut() {
             match op {
@@ -627,7 +656,7 @@ impl I2c for FakeBus {
                         }
                     }
                     if nacked {
-                        return Err(Nack(address));
+                        return Err(Nack(address).into());
                     }
                     for t in targets.iter_mut() {
                         match t {
@@ -653,6 +682,14 @@ impl I2c for FakeBus {
                     }
                 }
                 Operation::Read(buf) => {
+                    let fault = targets.iter().find_map(|t| match t {
+                        Target::Node(n) => n.read_fault,
+                        Target::Chip(c) => c.read_fault,
+                        Target::Hub(..) => None,
+                    });
+                    if let Some(kind) = fault {
+                        return Err(Fault { address, kind });
+                    }
                     // On the wire any device's ACK wins: the read fails
                     // only if every device here NACKs it.
                     let mut acked = false;
@@ -663,7 +700,7 @@ impl I2c for FakeBus {
                         };
                     }
                     if !acked {
-                        return Err(Nack(address));
+                        return Err(Nack(address).into());
                     }
                     // Open-drain: with several devices answering, a bit
                     // reads 1 only if every device sends 1.
@@ -714,24 +751,27 @@ impl embedded_hal::delay::DelayNs for FakeDelay {
 use crate::spec::{sensirion_crc8, ChipKind, Kind, WriteLen, CHIPS};
 use crate::Address;
 
-/// The error a [`SimBus`] returns: nothing acknowledged the transfer. Its
-/// [`kind`](i2c::Error::kind) is [`ErrorKind::NoAcknowledge`], as a real
-/// bus reports for an absent device.
+/// The error a [`SimBus`] returns. Its [`kind`](i2c::Error::kind) is
+/// [`ErrorKind::NoAcknowledge`] when nothing acknowledged the transfer, as
+/// a real bus reports for an absent device, or the kind set with
+/// [`SimBus::set_read_fault`] for a read from a faulted board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SimError {
     address: u8,
+    kind: ErrorKind,
 }
 
 impl SimError {
-    /// The 7-bit address nothing acknowledged.
+    /// The 7-bit address of the failed transfer.
     pub fn address(&self) -> u8 {
         self.address
     }
 }
 
 impl i2c::Error for SimError {
+    /// A NACK, or the kind set with [`SimBus::set_read_fault`].
     fn kind(&self) -> ErrorKind {
-        ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address)
+        self.kind
     }
 }
 
@@ -755,7 +795,8 @@ impl i2c::Error for SimError {
 ///   expected to have no sample until its first measurement ends. Code that
 ///   reads without waiting works here and may not on hardware;
 ///   [`SimBus::set_ready`] holds the flags clear to test the wait.
-/// - The Motors status always reads idle and DC; its commands show only in
+/// - The Motors status reads idle and DC unless set with
+///   [`SimBus::set_reading`] (its 5-byte status payload); its commands show only in
 ///   [`SimBus::last_write`].
 /// - A Pixels, Buzzer or Vibro read returns zeros after the strap byte. The
 ///   firmware returns whatever is left in its receive buffer; no driver
@@ -995,6 +1036,48 @@ impl SimBus {
         }
     }
 
+    /// Make every read from the boards and chips at `addr` fail with an
+    /// error of `kind` (`None` clears it), here and behind every hub port.
+    /// Writes still land: the node keeps processing frames, as
+    /// [`SimBus::last_write`] shows. Returns whether any board or chip is
+    /// at `addr`; hubs are not faulted.
+    ///
+    /// For testing what code does when a status read fails, for example
+    /// whether it still sends a stop. Choose a kind other than
+    /// `NoAcknowledge` for a hard failure: the drivers take a NACK for an
+    /// empty address, so a chip's `ready()`, for one, returns `Ok(false)`.
+    ///
+    /// The fault is set on the boards found at `addr` now and moves with a
+    /// node whose address changes. While a faulted board answers a read, the
+    /// read fails even if another device at that address would answer it.
+    pub fn set_read_fault(&mut self, addr: Address, kind: Option<ErrorKind>) -> bool {
+        set_read_fault(&mut self.bus, addr.get(), kind)
+    }
+
+    /// [`SimBus::set_read_fault`] for the board or chip at `addr` on `port`
+    /// of the hub at `hub` only.
+    pub fn set_read_fault_at(
+        &mut self,
+        hub: Address,
+        port: u8,
+        addr: Address,
+        kind: Option<ErrorKind>,
+    ) -> bool {
+        let Some(bus) = port_mut(&mut self.bus, hub.get(), port) else {
+            return false;
+        };
+        let mut found = false;
+        for n in bus.nodes.iter_mut().filter(|n| n.addr == addr.get()) {
+            n.read_fault = kind;
+            found = true;
+        }
+        for c in bus.chips.iter_mut().filter(|c| c.addr == addr.get()) {
+            c.read_fault = kind;
+            found = true;
+        }
+        found
+    }
+
     /// The model underneath, for the crate's own tests.
     #[doc(hidden)]
     pub fn model(&self) -> &FakeBus {
@@ -1009,9 +1092,27 @@ impl ErrorType for SimBus {
 impl I2c for SimBus {
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), SimError> {
         self.bus
-            .transaction(address, ops)
-            .map_err(|Nack(address)| SimError { address })
+            .run(address, ops)
+            .map_err(|Fault { address, kind }| SimError { address, kind })
     }
+}
+
+fn set_read_fault(bus: &mut FakeBus, addr: u8, kind: Option<ErrorKind>) -> bool {
+    let mut found = false;
+    for n in bus.nodes.iter_mut().filter(|n| n.addr == addr) {
+        n.read_fault = kind;
+        found = true;
+    }
+    for c in bus.chips.iter_mut().filter(|c| c.addr == addr) {
+        c.read_fault = kind;
+        found = true;
+    }
+    for h in bus.hubs.iter_mut() {
+        for port in h.ports.iter_mut() {
+            found |= set_read_fault(port, addr, kind);
+        }
+    }
+    found
 }
 
 fn set_present(bus: &mut FakeBus, addr: u8, absent: bool) -> bool {
