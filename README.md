@@ -385,9 +385,9 @@ For example:
 - `service::set_address` and `reset_address` fail their check that the
   target address is free, whenever the board has to move.
 - `service::general_call_reset` returns an error if any of its frames is
-  NACKed, at least when no node board answers.
-- A Thermo with an SHT31 may fail `verify()` or `read()`, which retry a
-  NACKed read; whether the SHT31 NACKs those reads is not measured.
+  NACKed, at least on a bus where nothing answers the general call.
+- A Thermo with an SHT31 may fail `verify()` or `read()`, which rely on
+  NACKed reads; whether the SHT31 NACKs those reads is not measured.
 - `Thermo::verify` and `Movement::verify` (and so `init`), which try a
   second address, report the empty first address's error rather than
   the second's.

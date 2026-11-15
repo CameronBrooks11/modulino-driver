@@ -65,8 +65,8 @@ the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's
 
 The `bench` bus maps `EREMOTEIO` to a NACK so the device steps do not depend
 on this. The README's Discovery section says what fails on a plain
-`I2cdev` if 1.1 shows `host kind: Other`; if it shows `NoAcknowledge`,
-that note comes out.
+`I2cdev` if 1.1 shows `host kind: Other`; if it shows `NoAcknowledge` on
+`i2c-bcm2835` or `i2c-designware` (setup step 4), that note comes out.
 
 ## 2. Discovery
 
