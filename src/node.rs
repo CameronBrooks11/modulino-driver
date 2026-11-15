@@ -99,6 +99,22 @@ impl<I2C: I2c> Node<I2C> {
         self.i2c
     }
 
+    /// The bus, for the service module's probes.
+    pub(crate) fn bus(&mut self) -> &mut I2C {
+        &mut self.i2c
+    }
+
+    /// Move this handle to `addr` once the board is confirmed there.
+    pub(crate) fn set_addr(&mut self, addr: Address) {
+        self.addr = addr;
+    }
+
+    /// Write a firmware command frame, bypassing the prefix guard. Only the
+    /// service module sends commands; the caller checks the length.
+    pub(crate) fn write_command(&mut self, frame: &[u8]) -> Result<(), Error<I2C::Error>> {
+        self.i2c.write(self.addr.get(), frame).map_err(Error::I2c)
+    }
+
     fn check(&self, strap: u8) -> Result<(), Error<I2C::Error>> {
         if self.kind.has_strap(strap) {
             Ok(())

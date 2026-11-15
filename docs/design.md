@@ -381,14 +381,42 @@ matters in practice.
 
 The only code that sends `CF`, `DIE` or general call.
 
-- `set_address(node, new: NewAddress, delay)`: pads `CF` to the board's
-  current write length (48 for a grayscale matrix), waits for the reset
-  (500 ms default, as AddressChanger does, `AddressChanger.ino:151`), then
-  confirms the strap at the new address. Returns the new `Node`.
-- `reset_address(node, delay)`: `CF 0x00`, which the firmware treats as
-  "back to the strap default" (`main.c:165-167`).
+A node acts on a `CF` frame of exactly its write length: it stores the
+third byte in flash as its 8-bit address and resets (`main.c:238-253`). At
+boot it uses a stored byte other than 0x00 or 0xFF that passes its check
+byte, and its strap otherwise (`main.c:160-167`). Both functions below take
+`&mut Node` and move it only once the board is confirmed at the new
+address, so a failed change leaves the caller with the old handle and its
+bus.
+
+- `set_address(node, new: NewAddress, delay)`: identifies the board, does
+  nothing if `new` is already its address, and refuses with
+  `AddressInUse` if anything answers at `new` (a 1-byte read, plus the
+  SHT3x status command at 0x45, where the Thermo's SHT31 sits and NACKs
+  reads while idle; 0x44, the HS3003's, gets the read alone).
+  The check covers the target, not the source: two boards of one kind at
+  the same address both take the command, so connect one board per address
+  while changing addresses. Then sends `CF new<<1` padded to the board's current write
+  length (48 for a grayscale matrix, read from the board), waits 500 ms (as
+  AddressChanger does, `AddressChanger.ino:151`), and confirms the strap at
+  `new`.
+- `reset_address(node, delay)`: the same with `CF 0x00`, which returns the
+  board to the default of its own strap (a Knob strapped 0x76 goes to 0x3B).
 - `general_call_reset(bus, delay)`: `CF 0x00` to address 0x00, which resets
-  every node on the bus. Named separately because it touches every board.
+  every node on the segment the call goes out on. Named separately because
+  it touches every board and checks nothing first. Through a `HubPort` the
+  segment is the selected port joined to the upstream bus, so upstream
+  boards are reset too; boards behind ports that are not selected are not
+  reached. A general call reaches every node through its usual receive path
+  (`main.c:571-580`), so each acts only on a frame of its own length. The
+  frame goes out once per distinct length, shortest first, so each board
+  takes a frame of its own length before any longer one. A board acts on
+  the command from its main loop (`main.c:219-221`), so it may still take
+  the longer frames before it resets; they carry the same command, and how
+  it handles their extra bytes is the first open question in section 7.
+  Every length is sent and the wait runs even if a frame fails with a bus
+  error; the first such error is returned afterwards. Otherwise returns
+  whether any frame was acknowledged.
 - Bootloader entry (`DIE`) and firmware update are deferred (section 9).
 
 ### 4.9 Errors
@@ -398,7 +426,7 @@ One error type for the crate:
 ```rust
 pub enum Error<E> {
     I2c(E),
-    InvalidAddress,
+    AddressInUse,
     OutOfRange,
     Timeout,
     DataError,
@@ -417,8 +445,9 @@ identity mismatch (Light, Movement, Pressure), which is now `WrongChip`; a
 device that does not answer was already the bus error. `InvalidParameter`
 became `OutOfRange` for values, `FrameLength` for an LED matrix frame of the
 wrong length, and `None` from `Hub::port` for a port above 7; its pixel
-coordinate checks went with the framebuffer API. `InvalidAddress` stays for the service module (M7), whose address-in-use
-check is its likely first user. `DataError` stays, narrowed to a reply the
+coordinate checks went with the framebuffer API. `InvalidAddress` became
+`AddressInUse`, the service module's: an address change refused because
+the target already answers. `DataError` stays, narrowed to a reply the
 protocol does not define or a corrupted one: an LED matrix mode other than
 `MON` or `GS4`, an SHT31 measurement whose CRC fails, or a VL53L4
 oscillator or PLL calibration reading of 0. A `defmt` feature derives
@@ -517,7 +546,7 @@ From cheapest to most expensive. Each rung proves only itself.
 
 | Question | Why it matters | Test |
 |---|---|---|
-| What does a node do with bytes beyond its write length? | The HAL source says the first bytes are processed; the rest may hold SCL low until the board resets | Send N+1, then N+2 bytes to Buttons with a power cycle ready; check state and the bus trace |
+| What does a node do with bytes beyond its write length? | The HAL source says the first bytes are processed; the rest may hold SCL low until the board resets. `general_call_reset` sends longer frames to boards that have taken their own but not yet reset | Send N+1, then N+2 bytes to Buttons with a power cycle ready; check state and the bus trace. Then a general-call reset with Buttons and Buzzer moved off their defaults: both come back, and the bus is free |
 | Is there a write-then-read race on the shared buffer? | Decides D13 | LED matrix frame immediately followed by a mode read; compare the display |
 | Is a short write really dropped? | Confirms the Vibro `off()` bug | Vibro on for 5 s, send the 8-byte off, observe |
 | Does the prefix hazard reproduce? | Confirms D8 is protecting against something real | Buzzer at 17987 Hz through a raw write, then scan: the board should come back at its strap default |
