@@ -253,10 +253,13 @@ pub mod knob {
 }
 ```
 
-Range checks live here: Buzzer below 180 Hz overflows the firmware's 16-bit
-timer (`main.c:262-283`); Motors frequency is clamped to 200-60000 Hz
-(`motors.c:496-497`). `WRITE_LEN` and `READ_PAYLOAD` are re-exported from
-`spec.rs`, so a codec cannot disagree with the table.
+Range checks live here, and a value outside the range is `OutOfRange`, not
+clamped. Buzzer frequencies run from 180 Hz, below which the firmware's
+16-bit timer overflows, to 5 898 150 Hz, the highest that still gives a
+non-zero compare value (`main.c:262-283`). Motors DC frequencies run from
+200 to 60000 Hz, the range the firmware clamps to (`motors.c:496-497`).
+`WRITE_LEN` and `READ_PAYLOAD` are computed from the `spec.rs` tables, so a
+codec cannot disagree with them.
 
 This is the layer the language-neutral vectors bind to, and the one a port
 to another language reproduces.
