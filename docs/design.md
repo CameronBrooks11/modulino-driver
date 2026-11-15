@@ -535,7 +535,8 @@ From cheapest to most expensive. Each rung proves only itself.
    round-trips, hub nesting and deselect-on-error, scan classification
    (including the hub/Vibro collision and the 0x02 latch relay), and
    `set_address` on a grayscale matrix are tested as behaviour, not as byte
-   sequences.
+   sequences. The same model is public as `sim::SimBus`, for running the
+   drivers on a host with no hardware.
 4. **Exact sequences.** `embedded-hal-mock` for chip register sequences,
    where the order of register writes is the contract.
 5. **Break-it check.** For each fix, break the guarded line and watch the

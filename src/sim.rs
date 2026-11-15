@@ -82,6 +82,9 @@ pub struct FakeNode {
     pub absent: bool,
     /// How a processed frame shows in later reads.
     pub echo: Echo,
+    /// Keep every processed frame in `frames` (and every `CF` length); off,
+    /// only the last frame is kept, so a long run does not grow memory.
+    pub history: bool,
 }
 
 #[doc(hidden)]
@@ -132,6 +135,7 @@ impl FakeNode {
             matrix_grayscale: None,
             absent: false,
             echo: Echo::None,
+            history: true,
         }
     }
 
@@ -161,7 +165,7 @@ impl FakeNode {
         if data.len() > self.write_len {
             self.long += 1;
         }
-        if data.starts_with(b"CF") {
+        if data.starts_with(b"CF") && self.history {
             self.cf_lengths.push(data.len());
         }
         let data = &data[..self.write_len];
@@ -190,13 +194,26 @@ impl FakeNode {
                 return;
             }
         }
+        // A payload set shorter than the pins it reports is padded as an
+        // unset byte reads (0xFF), not indexed past its end.
         match self.echo {
             Echo::None => {}
-            Echo::OptoRelay => self.payload[0] = u8::from(data[0] != 0),
+            Echo::OptoRelay => {
+                if self.payload.is_empty() {
+                    self.payload.resize(1, 0xFF);
+                }
+                self.payload[0] = u8::from(data[0] != 0);
+            }
             Echo::LatchRelay => {
+                if self.payload.len() < 2 {
+                    self.payload.resize(2, 0xFF);
+                }
                 let pins = if data[0] != 0 { [0, 1] } else { [1, 0] };
                 self.payload[..2].copy_from_slice(&pins);
             }
+        }
+        if !self.history {
+            self.frames.clear();
         }
         self.frames.push(data.to_vec());
     }
@@ -244,6 +261,8 @@ pub struct FakeHub {
     pub writes: Vec<u8>,
     /// Off the bus: neither the hub nor anything behind it answers.
     pub absent: bool,
+    /// Keep every control byte in `writes`; off, none are kept.
+    pub history: bool,
 }
 
 impl FakeHub {
@@ -255,6 +274,7 @@ impl FakeHub {
             ports: (0..8).map(|_| FakeBus::default()).collect(),
             writes: Vec::new(),
             absent: false,
+            history: true,
         }
     }
 
@@ -297,6 +317,8 @@ pub struct FakeChip {
     pub writes: Vec<Vec<u8>>,
     /// Off the bus: the chip answers nothing.
     pub absent: bool,
+    /// Keep every write in `writes`; off, none are kept.
+    pub history: bool,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
@@ -315,6 +337,7 @@ impl FakeChip {
             read_only: Vec::new(),
             writes: Vec::new(),
             absent: false,
+            history: true,
             pointer: 0,
             reply: None,
             not_ready: 0,
@@ -340,7 +363,9 @@ impl FakeChip {
     }
 
     fn write(&mut self, data: &[u8]) {
-        self.writes.push(data.to_vec());
+        if self.history {
+            self.writes.push(data.to_vec());
+        }
         if let Some((_, reply)) = self.commands.iter().find(|(c, _)| c == data) {
             self.reply = Some(reply.clone());
             self.not_ready = self.reply_after;
@@ -386,8 +411,8 @@ impl FakeChip {
 enum Target<'a> {
     Node(&'a mut FakeNode),
     Chip(&'a mut FakeChip),
-    /// A hub's control byte and its write log.
-    Hub(&'a mut u8, &'a mut Vec<u8>),
+    /// A hub's control byte, its write log, and whether to keep the log.
+    Hub(&'a mut u8, &'a mut Vec<u8>, bool),
 }
 
 #[doc(hidden)]
@@ -504,10 +529,11 @@ impl FakeBus {
                 ports,
                 control: ctrl,
                 writes,
+                history,
                 ..
             } = hub;
             if addr != 0 && hub_addr == addr {
-                out.push(Target::Hub(ctrl, writes));
+                out.push(Target::Hub(ctrl, writes, *history));
             }
             for (i, port) in ports.iter_mut().enumerate() {
                 if control >> i & 1 == 1 {
@@ -564,10 +590,12 @@ impl I2c for FakeBus {
                                 }
                             }
                             Target::Chip(c) => c.write(data),
-                            Target::Hub(control, writes) => {
+                            Target::Hub(control, writes, history) => {
                                 if let Some(&last) = data.last() {
                                     **control = last;
-                                    writes.push(last);
+                                    if *history {
+                                        writes.push(last);
+                                    }
                                 }
                             }
                         }
@@ -594,7 +622,7 @@ impl I2c for FakeBus {
                         match t {
                             Target::Node(n) => n.read(&mut mine),
                             Target::Chip(c) => c.read(&mut mine),
-                            Target::Hub(control, _) => mine.fill(**control),
+                            Target::Hub(control, _, _) => mine.fill(**control),
                         }
                         buf.iter_mut().zip(&mine).for_each(|(b, m)| *b &= m);
                     }
@@ -638,7 +666,23 @@ use crate::Address;
 /// The error a [`SimBus`] returns: nothing acknowledged the transfer. Its
 /// [`kind`](i2c::Error::kind) is [`ErrorKind::NoAcknowledge`], as a real
 /// bus reports for an absent device.
-pub type SimError = Nack;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SimError {
+    address: u8,
+}
+
+impl SimError {
+    /// The 7-bit address nothing acknowledged.
+    pub fn address(&self) -> u8 {
+        self.address
+    }
+}
+
+impl i2c::Error for SimError {
+    fn kind(&self) -> ErrorKind {
+        ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address)
+    }
+}
 
 /// A simulated I2C bus holding simulated Modulino boards, for running the
 /// real drivers on a host with no hardware.
@@ -650,7 +694,23 @@ pub type SimError = Nack;
 /// 200 mm away, and a board lying flat. Output boards keep what was last
 /// written: read it back with [`SimBus::last_write`], or through the driver
 /// where the firmware reports it (the opto and latch relays, the LED
-/// matrix's mode).
+/// matrix's mode). Inputs change with [`SimBus::set_reading`].
+///
+/// What is not modelled:
+/// - Readings are fixed raw values: the Light sensor's counts do not follow
+///   its gain, and no reading drifts.
+/// - The Motors status always reads idle and DC; its commands show only in
+///   [`SimBus::last_write`].
+/// - A Pixels, Buzzer or Vibro read returns zeros after the strap byte. The
+///   firmware returns whatever is left in its receive buffer; no driver
+///   reads these.
+/// - Only the last frame per board is kept, so memory stays flat over a
+///   long run.
+///
+/// Two identical boards behind different hub ports share an address: the
+/// methods taking only an address act on the first one found (or, for
+/// [`SimBus::set_present`], on all of them). The `_at` methods name the hub
+/// and port.
 ///
 /// The models follow the node firmware source and the chips' datasheets.
 /// None has been checked against hardware, and this API is outside the
@@ -682,11 +742,15 @@ pub struct SimHub {
 }
 
 impl SimHub {
-    /// A hub at `addr` (0x70-0x77) with nothing on its ports.
-    pub fn new(addr: Address) -> Self {
-        Self {
-            hub: FakeHub::new(addr.get()),
+    /// A hub at `addr` with nothing on its ports. `None` unless `addr` is
+    /// 0x70-0x77, the TCA9548A's range, as for [`Hub::with_address`](crate::Hub::with_address).
+    pub fn new(addr: Address) -> Option<Self> {
+        if !(0x70..=0x77).contains(&addr.get()) {
+            return None;
         }
+        let mut hub = FakeHub::new(addr.get());
+        hub.history = false;
+        Some(Self { hub })
     }
 
     /// The same hub with the boards of `bus` on `port` (0-7).
@@ -717,7 +781,9 @@ impl SimBus {
     /// The same bus with a node board of `kind` at `addr`, as if its address
     /// had been changed. Its strap byte is still the kind's first.
     pub fn with_node_at(mut self, kind: Kind, addr: Address) -> Self {
-        self.bus.nodes.push(node(kind).at(addr.get()));
+        let mut n = node(kind).at(addr.get());
+        n.history = false;
+        self.bus.nodes.push(n);
         self
     }
 
@@ -731,6 +797,7 @@ impl SimBus {
     pub fn with_chip_at(mut self, chip: ChipKind, addr: Address) -> Self {
         let mut fake = self::chip(chip);
         fake.addr = addr.get();
+        fake.history = false;
         self.bus.chips.push(fake);
         self
     }
@@ -774,6 +841,65 @@ impl SimBus {
             None => false,
         }
     }
+
+    /// [`SimBus::set_present`] for the board, chip or hub at `addr` on
+    /// `port` of the hub at `hub` only. Returns whether anything is there.
+    pub fn set_present_at(&mut self, hub: Address, port: u8, addr: Address, present: bool) -> bool {
+        let Some(bus) = port_mut(&mut self.bus, hub.get(), port) else {
+            return false;
+        };
+        let mut found = false;
+        for n in bus.nodes.iter_mut().filter(|n| n.addr == addr.get()) {
+            n.absent = !present;
+            found = true;
+        }
+        for c in bus.chips.iter_mut().filter(|c| c.addr == addr.get()) {
+            c.absent = !present;
+            found = true;
+        }
+        for h in bus.hubs.iter_mut().filter(|h| h.addr == addr.get()) {
+            h.absent = !present;
+            found = true;
+        }
+        found
+    }
+
+    /// [`SimBus::last_write`] for the node at `addr` on `port` of the hub at
+    /// `hub` only.
+    pub fn last_write_at(&self, hub: Address, port: u8, addr: Address) -> Option<&[u8]> {
+        port_ref(&self.bus, hub.get(), port)?
+            .nodes
+            .iter()
+            .find(|n| n.addr == addr.get())
+            .and_then(|n| n.frames.last())
+            .map(Vec::as_slice)
+    }
+
+    /// [`SimBus::set_reading`] for the node at `addr` on `port` of the hub at
+    /// `hub` only.
+    pub fn set_reading_at(
+        &mut self,
+        hub: Address,
+        port: u8,
+        addr: Address,
+        payload: &[u8],
+    ) -> bool {
+        let node = port_mut(&mut self.bus, hub.get(), port)
+            .and_then(|bus| bus.nodes.iter_mut().find(|n| n.addr == addr.get()));
+        match node {
+            Some(n) => {
+                n.payload = payload.to_vec();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The model underneath, for the crate's own tests.
+    #[doc(hidden)]
+    pub fn model(&self) -> &FakeBus {
+        &self.bus
+    }
 }
 
 impl ErrorType for SimBus {
@@ -782,7 +908,9 @@ impl ErrorType for SimBus {
 
 impl I2c for SimBus {
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), SimError> {
-        self.bus.transaction(address, ops)
+        self.bus
+            .transaction(address, ops)
+            .map_err(|Nack(address)| SimError { address })
     }
 }
 
@@ -806,6 +934,31 @@ fn set_present(bus: &mut FakeBus, addr: u8, absent: bool) -> bool {
         }
     }
     found
+}
+
+/// The bus on `port` of the hub at `hub`, searching every port for the hub.
+fn port_mut(bus: &mut FakeBus, hub: u8, port: u8) -> Option<&mut FakeBus> {
+    if let Some(i) = bus.hubs.iter().position(|h| h.addr == hub) {
+        return bus.hubs[i].ports.get_mut(usize::from(port));
+    }
+    for h in bus.hubs.iter_mut() {
+        for p in h.ports.iter_mut() {
+            if let Some(found) = port_mut(p, hub, port) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn port_ref(bus: &FakeBus, hub: u8, port: u8) -> Option<&FakeBus> {
+    if let Some(h) = bus.hubs.iter().find(|h| h.addr == hub) {
+        return h.ports.get(usize::from(port));
+    }
+    bus.hubs
+        .iter()
+        .flat_map(|h| h.ports.iter())
+        .find_map(|p| port_ref(p, hub, port))
 }
 
 fn find_node_mut(bus: &mut FakeBus, addr: u8) -> Option<&mut FakeNode> {
@@ -890,7 +1043,8 @@ fn chip(kind: ChipKind) -> FakeChip {
             .reg(0x13, 0xE8)
             .reg(0x14, 0x03),
         // VL53L4CD/ED: model ID, booted, the GPIO showing data ready, an
-        // OSC_FREQUENCY of 3213, and a result of 200 mm with a valid range
+        // OSC_FREQUENCY of 3213, an oscillator calibration of 300, and a
+        // result of 200 mm with a valid range
         // status (raw 9) and 12 SPADs. The 0x2D-0x87 configuration the
         // driver loads is beyond the result registers.
         ChipKind::Vl53l4cd | ChipKind::Vl53l4ed => {
@@ -907,6 +1061,10 @@ fn chip(kind: ChipKind) -> FakeChip {
                 .reg(0x0031, 0x01)
                 .reg(0x0006, 0x0C)
                 .reg(0x0007, 0x8D)
+                // RESULT_OSC_CALIBRATE_VAL, which autonomous timing divides
+                // by (the value the chip tests use).
+                .fixed(0x00DE, 0x01)
+                .fixed(0x00DF, 0x2C)
                 .fixed(0x0089, 0x09)
                 .fixed(0x008C, 0x0C)
                 .fixed(0x008E, 0x01)

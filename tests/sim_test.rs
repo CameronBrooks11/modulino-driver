@@ -128,6 +128,7 @@ fn movement_lies_flat() {
     let mut m = Movement::new(SimBus::new().with_chip(ChipKind::Lsm6dsox));
     m.init().unwrap();
     assert!(m.acceleration_ready().unwrap());
+    assert!(m.angular_velocity_ready().unwrap());
     let g = m.acceleration().unwrap();
     assert!(
         g.x == 0.0 && g.y == 0.0 && (g.z - 1.0).abs() < 0.01,
@@ -152,6 +153,7 @@ fn light_reads_a_lit_room() {
     assert!(l.ready().unwrap());
     let r = l.read().unwrap();
     assert!((r.lux - 174.84).abs() < 0.1, "{r:?}");
+    assert_eq!((r.ir, r.green, r.red, r.blue), (500, 1000, 1000, 1000));
 }
 
 #[test]
@@ -170,7 +172,26 @@ fn distance_ranges_a_target_on_either_variant() {
         let r = d.read().unwrap();
         assert_eq!((r.distance_mm, r.status), (200, 0), "{chip:?}");
         d.stop_ranging().unwrap();
+        // Autonomous timing divides by the oscillator calibration.
+        d.set_range_timing(50, 100).unwrap();
     }
+    // RANGE_CONFIG_A from an OSC_FREQUENCY of 3213, as ST's driver computes
+    // it for the CD (tests/chips_test.rs, init_follows_st_sensor_init).
+    let mut d = Distance::new(SimBus::new().with_chip(ChipKind::Vl53l4cd));
+    d.init(&mut NoopDelay::new()).unwrap();
+    let bus = d.release();
+    let regs = &bus.model().chips[0].regs;
+    assert_eq!((regs[&0x005E], regs[&0x005F]), (0x00, 0x40));
+
+    // INTERMEASUREMENT from an oscillator calibration of 300: 1.055 * 18 *
+    // 300 is 5697 (tests/chips_test.rs, autonomous_timing_writes_the_period).
+    let mut d = Distance::new(SimBus::new().with_chip(ChipKind::Vl53l4cd));
+    d.init(&mut NoopDelay::new()).unwrap();
+    d.set_range_timing(10, 18).unwrap();
+    let bus = d.release();
+    let regs = &bus.model().chips[0].regs;
+    let period = u32::from_be_bytes([regs[&0x006C], regs[&0x006D], regs[&0x006E], regs[&0x006F]]);
+    assert_eq!(period, 5697);
 }
 
 #[test]
@@ -196,8 +217,11 @@ fn an_absent_board_is_a_nack_and_comes_back_with_its_state() {
 }
 
 #[test]
-fn boards_behind_a_hub() {
-    let hub = SimHub::new(a(0x70))
+fn boards_behind_a_hub_are_told_apart_by_port() {
+    let hub_addr = a(0x70);
+    let buttons = Kind::Buttons.default_address();
+    let hub = SimHub::new(hub_addr)
+        .unwrap()
         .with_port(0, SimBus::new().with_node(Kind::Buttons))
         .with_port(1, SimBus::new().with_node(Kind::Buttons));
     let bus = RefCell::new(SimBus::new().with_hub(hub));
@@ -206,15 +230,168 @@ fn boards_behind_a_hub() {
     let mut right = Buttons::new(hub.port(1).unwrap());
     left.verify().unwrap();
     right.verify().unwrap();
-    left.set_leds(true, false, false).unwrap();
-    // Only one of the two answers each port.
-    assert!(right.read().is_ok());
+
+    // A write through port 1 reaches only port 1's board.
+    right.set_leds(false, false, true).unwrap();
     hub.deselect().unwrap();
+    {
+        let sim = bus.borrow();
+        assert_eq!(
+            sim.last_write_at(hub_addr, 1, buttons),
+            Some(&[0, 0, 1][..])
+        );
+        assert_eq!(
+            sim.last_write_at(hub_addr, 0, buttons),
+            None,
+            "port 0 untouched"
+        );
+    }
+
+    // Inputs and presence per port.
+    assert!(bus
+        .borrow_mut()
+        .set_reading_at(hub_addr, 0, buttons, &[1, 0, 0]));
+    assert!(bus
+        .borrow_mut()
+        .set_reading_at(hub_addr, 1, buttons, &[0, 1, 0]));
+    let (l, r) = (left.read().unwrap(), right.read().unwrap());
+    assert!(l.a && !l.b, "{l:?}");
+    assert!(r.b && !r.a, "{r:?}");
+    assert!(bus.borrow_mut().set_present_at(hub_addr, 0, buttons, false));
+    assert!(is_nack(&left.read().unwrap_err()));
+    assert!(right.read().is_ok(), "only port 0's board left");
+    assert!(bus.borrow_mut().set_present_at(hub_addr, 0, buttons, true));
+    assert!(left.read().is_ok());
 
     // With the hub off the bus, nothing behind it answers either.
-    bus.borrow_mut().set_present(a(0x70), false);
+    bus.borrow_mut().set_present(hub_addr, false);
     let err = left.read().unwrap_err();
     assert!(is_nack(&err), "{err:?}");
+}
+
+#[test]
+fn address_wide_methods_reach_behind_hub_ports() {
+    let hub_addr = a(0x70);
+    let buttons = Kind::Buttons.default_address();
+    let hub = SimHub::new(hub_addr)
+        .unwrap()
+        .with_port(2, SimBus::new().with_node(Kind::Buttons));
+    let bus = RefCell::new(SimBus::new().with_hub(hub));
+    let hub = Hub::new(&bus);
+    let mut b = Buttons::new(hub.port(2).unwrap());
+    assert!(bus.borrow_mut().set_reading(buttons, &[0, 0, 1]));
+    assert!(b.read().unwrap().c);
+    b.set_leds(true, true, true).unwrap();
+    assert_eq!(bus.borrow().last_write(buttons), Some(&[1, 1, 1][..]));
+    assert!(bus.borrow_mut().set_present(buttons, false));
+    assert!(is_nack(&b.read().unwrap_err()));
+}
+
+#[test]
+fn chips_behind_a_hub_port() {
+    let hub = SimHub::new(a(0x70))
+        .unwrap()
+        .with_port(3, SimBus::new().with_chip(ChipKind::Lps22hb));
+    let bus = RefCell::new(SimBus::new().with_hub(hub));
+    let hub = Hub::new(&bus);
+    let mut p = Pressure::new(hub.port(3).unwrap());
+    p.init().unwrap();
+    assert!((p.pressure().unwrap() - 1013.25).abs() < 0.01);
+}
+
+#[test]
+fn a_hub_address_outside_0x70_0x77_is_refused() {
+    assert!(SimHub::new(a(0x40)).is_none());
+    assert!(SimHub::new(a(0x77)).is_some());
+}
+
+#[test]
+fn an_absent_chip_is_a_nack() {
+    let addr = a(0x5C);
+    let mut bus = SimBus::new().with_chip(ChipKind::Lps22hb);
+    assert!(bus.set_present(addr, false));
+    let mut p = Pressure::new(bus);
+    let err = p.init().unwrap_err();
+    assert!(is_nack(&err), "{err:?}");
+    let mut bus = p.release();
+    assert!(bus.set_present(addr, true));
+    let mut p = Pressure::new(bus);
+    p.init().unwrap();
+}
+
+#[test]
+fn a_chip_at_another_address() {
+    let mut p = Pressure::with_address(
+        SimBus::new().with_chip_at(ChipKind::Lps22hb, a(0x5D)),
+        a(0x5D),
+    );
+    p.init().unwrap();
+    let err = Pressure::new(p.release()).init().unwrap_err();
+    assert!(is_nack(&err), "nothing at the default 0x5C: {err:?}");
+}
+
+#[test]
+fn the_sht31_nacks_reads_until_commanded() {
+    use embedded_hal::i2c::I2c;
+    let mut bus = SimBus::new().with_chip(ChipKind::Sht31);
+    let mut buf = [0u8; 3];
+    let err = bus.read(0x45, &mut buf).unwrap_err();
+    assert_eq!(err.address(), 0x45);
+    assert!(matches!(
+        embedded_hal::i2c::Error::kind(&err),
+        ErrorKind::NoAcknowledge(_)
+    ));
+}
+
+#[test]
+fn the_matrix_starts_in_mono() {
+    let mut m = LedMatrix::new(SimBus::new().with_node(Kind::LedMatrix));
+    m.verify().unwrap();
+    assert_eq!(m.mode().unwrap(), MatrixMode::Mono);
+}
+
+#[test]
+fn a_short_reading_does_not_break_a_relay() {
+    let opto = Kind::OptoRelay.default_address();
+    let mut bus = SimBus::new().with_node(Kind::OptoRelay);
+    assert!(bus.set_reading(opto, &[]));
+    let mut relay = OptoRelay::new(bus);
+    relay.on().unwrap();
+    assert!(relay.is_on().unwrap());
+
+    let latch = Kind::LatchRelay.default_address();
+    let mut bus = SimBus::new().with_node(Kind::LatchRelay);
+    assert!(bus.set_reading(latch, &[0]));
+    let mut relay = LatchRelay::new(bus);
+    relay.on(&mut NoopDelay::new()).unwrap();
+    assert_eq!(relay.state().unwrap(), Some(true));
+}
+
+#[test]
+fn memory_stays_flat_over_a_long_run() {
+    let addr = Kind::Buttons.default_address();
+    let mut buttons = Buttons::new(SimBus::new().with_node(Kind::Buttons));
+    for i in 0..1000 {
+        buttons.set_leds(i % 2 == 0, false, false).unwrap();
+    }
+    let bus = buttons.release();
+    assert_eq!(bus.model().nodes[0].frames.len(), 1, "only the last frame");
+    assert_eq!(bus.last_write(addr), Some(&[0, 0, 0][..]));
+
+    let mut p = Pressure::new(SimBus::new().with_chip(ChipKind::Lps22hb));
+    p.init().unwrap();
+    for _ in 0..1000 {
+        p.pressure().unwrap();
+    }
+    assert!(p.release().model().chips[0].writes.is_empty());
+
+    let hub = SimHub::new(a(0x70)).unwrap();
+    let bus = RefCell::new(SimBus::new().with_hub(hub));
+    let h = Hub::new(&bus);
+    for _ in 0..1000 {
+        h.deselect().unwrap();
+    }
+    assert!(bus.borrow().model().hubs[0].writes.is_empty());
 }
 
 #[test]
