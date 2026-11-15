@@ -22,3 +22,6 @@ target
 
 # Claude Code
 .claude
+
+# Local MCP server configuration
+.mcp.json
