@@ -52,6 +52,7 @@ fn boards() -> Vec<(Kind, FakeNode)> {
                 out.push((spec.kind, FakeNode::led_matrix(false)));
                 out.push((spec.kind, FakeNode::led_matrix(true)));
             }
+            other => panic!("no test board for {other:?}"),
         }
     }
     out

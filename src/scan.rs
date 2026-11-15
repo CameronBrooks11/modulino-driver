@@ -65,6 +65,7 @@ use crate::Error;
 /// One device found by [`scan`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum Found {
     /// A node board, identified by its strap byte.
     Node(Address, Kind),

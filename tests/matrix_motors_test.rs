@@ -2,7 +2,7 @@
 
 mod support;
 
-use modulino_driver::{DecayMode, Error, LedMatrix, MatrixMode, MotorMode, MotorStatus, Motors};
+use modulino_driver::{DecayMode, Error, LedMatrix, MatrixMode, MotorMode, Motors};
 use support::{FakeBus, FakeNode};
 
 const MATRIX: u8 = 0x39;
@@ -220,17 +220,13 @@ fn motors_status_decodes_currents_and_flags() {
         8,
     )]);
     let mut motors = Motors::new(bus);
-    assert_eq!(
-        motors.status().unwrap(),
-        MotorStatus {
-            current_a_raw: 0x1234,
-            current_b_raw: 0x0010,
-            busy: true,
-            mode: MotorMode::Stepper,
-            half_step: true,
-            half_full_scale: true,
-            decay: DecayMode::Fast,
-            release_on_complete: true,
-        }
-    );
+    let s = motors.status().unwrap();
+    assert_eq!(s.current_a_raw, 0x1234);
+    assert_eq!(s.current_b_raw, 0x0010);
+    assert!(s.busy);
+    assert_eq!(s.mode, MotorMode::Stepper);
+    assert!(s.half_step);
+    assert!(s.half_full_scale);
+    assert_eq!(s.decay, DecayMode::Fast);
+    assert!(s.release_on_complete);
 }

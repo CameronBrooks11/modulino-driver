@@ -61,6 +61,7 @@ pub const WAIT_POLLS: u32 = 1000;
 /// Which of the two chips answered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum Variant {
     /// VL53L4CD, model ID 0xEB
     Cd,
@@ -111,6 +112,7 @@ const STATUS_MAP: [u8; 24] = [
 /// One ranging result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub struct DistanceReading {
     /// Distance in mm
     pub distance_mm: u16,

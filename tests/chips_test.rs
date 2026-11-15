@@ -406,7 +406,7 @@ mod thermo {
 mod distance {
     use super::*;
     use modulino_driver::chips::vl53l4::{macro_period_us, range_config, Variant};
-    use modulino_driver::{Distance, DistanceReading};
+    use modulino_driver::Distance;
     use support::FakeDelay;
 
     /// ST's default configuration for 0x2D..=0x87, copied from
@@ -601,17 +601,13 @@ mod distance {
             .reg(0x0096, 0x01)
             .reg(0x0097, 0xF4);
         let mut d = Distance::new(chips(vec![chip]));
-        assert_eq!(
-            d.read().unwrap(),
-            DistanceReading {
-                distance_mm: 500,
-                status: 0,
-                signal_kcps: 0x0100 * 8,
-                ambient_kcps: 0x10 * 8,
-                sigma_mm: 0x28 / 4,
-                spads: 12
-            }
-        );
+        let r = d.read().unwrap();
+        assert_eq!(r.distance_mm, 500);
+        assert_eq!(r.status, 0);
+        assert_eq!(r.signal_kcps, 0x0100 * 8);
+        assert_eq!(r.ambient_kcps, 0x10 * 8);
+        assert_eq!(r.sigma_mm, 0x28 / 4);
+        assert_eq!(r.spads, 12);
         assert_eq!(written(&d.release(), 0x0086), [0x01]);
 
         // No SPADs: no target, whatever the raw status.
