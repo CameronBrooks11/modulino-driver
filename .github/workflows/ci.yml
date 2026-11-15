@@ -9,6 +9,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege: jobs only read the repository. security_audit sets its
+# own permissions (checks: write), which replace these for that job.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   # Rustdoc lints (broken links) are warnings, and clippy does not run them.
@@ -19,6 +24,7 @@ jobs:
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +57,7 @@ jobs:
   build-targets:
     name: Build for Targets
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +85,7 @@ jobs:
   msrv:
     name: MSRV (1.75)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -98,6 +106,7 @@ jobs:
   dev-toolchain:
     name: Tests and examples (1.85)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -111,6 +120,7 @@ jobs:
   security_audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       checks: write
     steps:
@@ -124,6 +134,7 @@ jobs:
   firmware-drift:
     name: Firmware drift
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
