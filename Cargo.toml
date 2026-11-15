@@ -2,7 +2,7 @@
 name = "modulino-driver"
 version = "0.1.0-dev"
 edition = "2021"
-authors = ["Mariusz Jurgielewicz <mordor@mail.com>"]
+authors = ["Mariusz Jurgielewicz <mordor@mail.com>", "Cameron Brooks"]
 description = "A layered, hardware-agnostic no_std driver for Arduino Modulino boards"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/CameronBrooks11/modulino-driver"
@@ -10,6 +10,10 @@ readme = "README.md"
 keywords = ["embedded", "i2c", "arduino", "modulino", "no_std"]
 categories = ["embedded", "no-std", "hardware-support"]
 rust-version = "1.75"
+# The tests reach the crate's `sim` module through a path dev-dependency on
+# the crate itself, which `cargo package` strips, so they cannot build from
+# the package; they stay in the repository. The rest is repository tooling.
+exclude = ["tests/", ".github/", "AGENTS.md", "CLAUDE.md", "justfile", ".gitignore"]
 
 [dependencies]
 embedded-hal = "1.0"
