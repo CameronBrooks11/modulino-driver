@@ -223,12 +223,13 @@ use modulino_driver::Movement;
 let mut movement = Movement::new(i2c);
 movement.init()?;
 
-// Read acceleration (in g)
-let accel = movement.acceleration()?;
+// The data registers hold no sample until its ready flag is set
+while !movement.acceleration_ready()? {}
+let accel = movement.acceleration()?; // in g
 println!("Accel: x={:.2}g, y={:.2}g, z={:.2}g", accel.x, accel.y, accel.z);
 
-// Read angular velocity (in dps)
-let gyro = movement.angular_velocity()?;
+while !movement.angular_velocity_ready()? {}
+let gyro = movement.angular_velocity()?; // in dps
 println!("Gyro: x={:.2}°/s, y={:.2}°/s, z={:.2}°/s", gyro.x, gyro.y, gyro.z);
 ```
 
@@ -262,11 +263,12 @@ use modulino_driver::Pressure;
 let mut pressure = Pressure::new(i2c);
 pressure.init()?; // verify, reset, 10 Hz
 
-// Read atmospheric pressure in hPa
-let hpa = pressure.pressure()?;
+// Wait for the first sample
+while !pressure.pressure_ready()? {}
+let hpa = pressure.pressure()?; // in hPa
 println!("Pressure: {:.1} hPa", hpa);
 
-// Read ambient temperature
+while !pressure.temperature_ready()? {}
 let temp = pressure.temperature()?;
 println!("Temperature: {:.1}°C", temp);
 ```
@@ -278,6 +280,9 @@ use modulino_driver::Light;
 
 let mut light = Light::new(i2c);
 light.init()?; // verify, then 18x gain, 16-bit, every 25 ms
+
+// The registers hold no sample until the first measurement ends
+while !light.ready()? {}
 
 // All four channels from one measurement, and the lux they give
 let reading = light.read()?;
@@ -368,9 +373,21 @@ reply looks like a latch relay. The identity checks write register
 indexes, which other (non-Modulino) chips at those addresses may act on.
 See the `scan` module docs for the remaining limits.
 
+**On a Raspberry Pi**, read from the kernel source and not yet measured
+(bench step 1.1 settles it): the Pi's I2C drivers report an
+unacknowledged address as `EREMOTEIO`, which `linux-embedded-hal` 0.5
+reports as `ErrorKind::Other`, not `NoAcknowledge`. This crate tells an
+empty address from a fault only by `NoAcknowledge`. Over a plain `I2cdev`,
+`scan` then stops at the first empty address with an error, a Thermo with
+an SHT31 fails `verify()` (the SHT31 NACKs reads while idle, and the retry
+waits for `NoAcknowledge`), and the address-change checks in `service`
+fail. Wrap the bus so that errno 121 maps to `NoAcknowledge`, as the bench
+example does (`BusError` in `examples/bench.rs`). The table in
+[docs/bench.md](docs/bench.md) gives each Pi model's driver.
+
 ## Features
 
-- `defmt`: derive `defmt::Format` on every public data type (errors, readings, states, spec types) for embedded logging
+- `defmt`: `defmt::Format` on every public data type (errors, readings, states, spec types) for embedded logging
 - `sim`: simulated boards on a simulated I2C bus (`sim::SimBus`), to run the drivers on a host with no hardware. Brings in `std`. The models follow the firmware source and datasheets, have not been checked against hardware, and are outside the semver promise until they are
 
 ```toml

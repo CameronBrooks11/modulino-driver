@@ -51,7 +51,7 @@ way.
 | Step | Command | Look for |
 |---|---|---|
 | 1.1 | `nack` (nothing connected) | The `errno`, `host kind` and `bench kind` lines. This answers "Does the Linux host report a NACK as `NoAcknowledge`?" |
-| 1.2 | `i2cdetect -y 1` with all boards on the bus | The addresses present, to compare with 2.1 |
+| 1.2 | `i2cdetect -y -a 1 0x01 0x77` with all boards on the bus | The addresses present, to compare with 2.1. By default `i2cdetect` scans 0x08-0x77 (`man i2cdetect`) and misses the latch relay at 0x02; `-a` allows the addresses below 0x08 |
 
 What 1.1 shows depends on the adapter driver noted in setup step 4. From
 the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's

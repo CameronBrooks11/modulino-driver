@@ -700,6 +700,10 @@ impl i2c::Error for SimError {
 /// What is not modelled:
 /// - Readings are fixed raw values: the Light sensor's counts do not follow
 ///   its gain, and no reading drifts.
+/// - Chip data is ready at once: the ready flags (Light, Pressure,
+///   Movement, Distance) read set from the start, where a real chip holds
+///   no sample until its first measurement ends. Code that reads
+///   without waiting works here and not on hardware.
 /// - The Motors status always reads idle and DC; its commands show only in
 ///   [`SimBus::last_write`].
 /// - A Pixels, Buzzer or Vibro read returns zeros after the strap byte. The

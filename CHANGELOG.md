@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `spec::NODES` and `spec::CHIPS` are `&'static [NodeSpec]` and
   `&'static [ChipSpec]`, not arrays, so a new board does not change
   their type. `for n in NODES` now yields `&NodeSpec`, and array-only
-  uses such as `NODES.map(..)` no longer compile.
+  uses such as `for n in &NODES` and `NODES.map(..)` no longer compile.
 - `chips::hs3003::ADDRESS` and `chips::sht31::ADDRESS` are `Address`,
   not `u8`.
 - `Address` and `NewAddress` print in hex under `Debug`
@@ -188,8 +188,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Pressure::with_address` and `Pressure::verify`.
 - `codec`: a pure encoder/decoder per node kind, with the protocol
   limits as constants (`buzzer::MIN_FREQUENCY`/`MAX_FREQUENCY`,
-  `latch_relay::SETTLE_MS` and others), and `KnobState`, `KnobRaw`,
-  `JoystickState`, `JoystickRaw`. `spec/vectors/` holds their vectors.
+  `latch_relay::SETTLE_MS` and others), and `KnobRaw`, `JoystickState`
+  and `JoystickRaw`. `spec/vectors/` holds their vectors. `KnobState`,
+  what `Knob::read` returns, is at the crate root.
 
 ### Fixed
 
@@ -272,7 +273,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Pixels::clear_range`; `PowerLevel::value` and `From<PowerLevel> for
   u8` (use `as u8`).
 
-## [0.3.0] - 2026-07-02
+## [modulino-rs 0.3.0] - 2026-07-02
 
 Upstream released 0.3.0 without a changelog entry; this one is written
 from the release commit (87e091a).
@@ -284,7 +285,7 @@ from the release commit (87e091a).
 - Joystick axes inverted: `x` and `y` are now `128 - raw` (were `raw - 128`).
 - Hub docs no longer mark the driver experimental.
 
-## [0.2.0] - 2026-05-24
+## [modulino-rs 0.2.0] - 2026-05-24
 
 ### Added
 - Native, optimized internal driver for **Modulino LED Matrix** (`LedMatrix`).
@@ -299,7 +300,7 @@ from the release commit (87e091a).
 - Resolved various Clippy lint warnings to improve code cleanliness.
 - Modernized Continuous Integration (CI) workflows to use Node 24 and eliminate deprecation warnings.
 
-## [0.1.0] - 2026-02-01
+## [modulino-rs 0.1.0] - 2026-02-01
 
 ### Added
 
@@ -318,6 +319,6 @@ from the release commit (87e091a).
 - Comprehensive documentation and examples
 
 [Unreleased]: https://github.com/CameronBrooks11/modulino-driver/commits/main
-[0.3.0]: https://github.com/melastmohican/modulino-rs/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/melastmohican/modulino-rs/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/melastmohican/modulino-rs/releases/tag/v0.1.0
+[modulino-rs 0.3.0]: https://github.com/melastmohican/modulino-rs/compare/v0.2.0...v0.3.0
+[modulino-rs 0.2.0]: https://github.com/melastmohican/modulino-rs/compare/v0.1.0...v0.2.0
+[modulino-rs 0.1.0]: https://github.com/melastmohican/modulino-rs/releases/tag/v0.1.0
