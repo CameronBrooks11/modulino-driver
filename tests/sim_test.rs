@@ -478,3 +478,108 @@ fn an_address_change_keeps_no_history() {
     assert_eq!(node.address(), a(0x40));
     assert!(node.release().model().nodes[0].cf_lengths.is_empty());
 }
+
+#[test]
+fn movement_pressure_and_light_ready_flags_can_be_held_clear() {
+    let mut bus = SimBus::new().with_chip(ChipKind::Lsm6dsox);
+    assert!(bus.set_ready(a(0x6A), false));
+    let mut m = Movement::new(bus);
+    m.init().unwrap();
+    assert!(!m.acceleration_ready().unwrap());
+    assert!(!m.angular_velocity_ready().unwrap());
+    let mut bus = m.release();
+    assert!(bus.set_ready(a(0x6A), true));
+    let mut m = Movement::new(bus);
+    m.init().unwrap();
+    assert!(m.acceleration_ready().unwrap());
+    assert!(m.angular_velocity_ready().unwrap());
+
+    let mut bus = SimBus::new().with_chip(ChipKind::Lps22hb);
+    assert!(bus.set_ready(a(0x5C), false));
+    let mut p = Pressure::new(bus);
+    p.init().unwrap();
+    assert!(!p.pressure_ready().unwrap());
+    assert!(!p.temperature_ready().unwrap());
+    let mut bus = p.release();
+    assert!(bus.set_ready(a(0x5C), true));
+    let mut p = Pressure::new(bus);
+    assert!(p.pressure_ready().unwrap());
+    assert!(p.temperature_ready().unwrap());
+
+    let mut bus = SimBus::new().with_chip(ChipKind::Ltr381rgb);
+    assert!(bus.set_ready(a(0x53), false));
+    let mut l = Light::new(bus);
+    l.init().unwrap();
+    assert!(!l.ready().unwrap());
+    let mut bus = l.release();
+    assert!(bus.set_ready(a(0x53), true));
+    let mut l = Light::new(bus);
+    assert!(l.ready().unwrap());
+}
+
+#[test]
+fn a_held_distance_flag_times_out_its_waits() {
+    for chip in [ChipKind::Vl53l4cd, ChipKind::Vl53l4ed] {
+        let mut delay = NoopDelay::new();
+        let mut bus = SimBus::new().with_chip(chip);
+        assert!(bus.set_ready(a(0x29), false));
+        let mut d = Distance::new(bus);
+        // Before init the GPIO is active high (the sim's power-up value);
+        // init sets it active low. Held reads "no data" under either.
+        assert!(!d.data_ready().unwrap(), "{chip:?} active high");
+        assert!(
+            matches!(d.init(&mut delay), Err(Error::Timeout)),
+            "{chip:?}"
+        );
+
+        let mut bus = d.release();
+        assert!(bus.set_ready(a(0x29), true));
+        let mut d = Distance::new(bus);
+        d.init(&mut delay).unwrap();
+        let mut bus = d.release();
+        bus.set_ready(a(0x29), false);
+        let mut d = Distance::new(bus);
+        assert!(!d.data_ready().unwrap(), "{chip:?}");
+        // Only the CD waits for, and discards, a first sample on start.
+        let started = d.start_ranging(&mut delay);
+        if chip == ChipKind::Vl53l4cd {
+            assert!(matches!(started, Err(Error::Timeout)), "{started:?}");
+        } else {
+            assert!(started.is_ok(), "{started:?}");
+        }
+
+        let mut bus = d.release();
+        bus.set_ready(a(0x29), true);
+        let mut d = Distance::new(bus);
+        assert!(d.data_ready().unwrap(), "{chip:?}");
+    }
+}
+
+#[test]
+fn set_ready_needs_a_chip_with_a_ready_flag() {
+    let mut bus = SimBus::new()
+        .with_node(Kind::Buttons)
+        .with_chip(ChipKind::Hs3003);
+    assert!(!bus.set_ready(a(0x3E), false), "a node");
+    assert!(!bus.set_ready(a(0x44), false), "the HS3003 has no flag");
+    assert!(!bus.set_ready(a(0x53), false), "nothing there");
+}
+
+#[test]
+fn ready_flags_are_held_per_hub_port() {
+    let hub_addr = a(0x70);
+    let hub = SimHub::new(hub_addr)
+        .unwrap()
+        .with_port(1, SimBus::new().with_chip(ChipKind::Ltr381rgb))
+        .with_port(2, SimBus::new().with_chip(ChipKind::Ltr381rgb));
+    let mut bus = SimBus::new().with_hub(hub);
+    assert!(bus.set_ready_at(hub_addr, 1, a(0x53), false));
+    assert!(!bus.set_ready_at(hub_addr, 3, a(0x53), false), "empty port");
+    let bus = RefCell::new(bus);
+    let hub = Hub::new(&bus);
+    assert!(!Light::new(hub.port(1).unwrap()).ready().unwrap());
+    assert!(Light::new(hub.port(2).unwrap()).ready().unwrap());
+    // The address-wide method reaches the first one behind a port.
+    assert!(bus.borrow_mut().set_ready(a(0x53), true));
+    assert!(Light::new(hub.port(1).unwrap()).ready().unwrap());
+}
