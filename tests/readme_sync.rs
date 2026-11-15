@@ -17,11 +17,19 @@ const SETUP: &str = "    let mut i2c = Mock::new(&[]);
 ";
 
 /// The README's ```rust blocks, each with the nearest heading above it.
+///
+/// Only fences this function understands pass: an unindented ``` with
+/// `rust`, `toml`, `sh`, `text` or no info string, closed by a bare ```.
+/// Anything else panics, so a block is never skipped silently.
 fn blocks(readme: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut heading = String::new();
-    let mut lines = readme.lines();
-    while let Some(line) = lines.next() {
+    let mut lines = readme.lines().enumerate();
+    while let Some((n, line)) = lines.next() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("~~~") || (trimmed.starts_with("```") && line != trimmed) {
+            panic!("README.md:{}: unsupported fence {line:?}", n + 1);
+        }
         if let Some(h) = line.strip_prefix('#') {
             heading = h.trim_start_matches('#').trim().to_string();
             continue;
@@ -29,14 +37,26 @@ fn blocks(readme: &str) -> Vec<(String, String)> {
         let Some(lang) = line.strip_prefix("```") else {
             continue;
         };
+        if !["rust", "toml", "sh", "text", ""].contains(&lang) {
+            panic!(
+                "README.md:{}: fence info {lang:?}; use plain ```rust or extend tests/readme_sync.rs",
+                n + 1
+            );
+        }
         let mut body = String::new();
-        for line in lines.by_ref() {
-            if line == "```" {
+        let mut closed = false;
+        for (m, line) in lines.by_ref() {
+            if line.trim().starts_with("```") {
+                if line != "```" {
+                    panic!("README.md:{}: unsupported closing fence {line:?}", m + 1);
+                }
+                closed = true;
                 break;
             }
             body.push_str(line);
             body.push('\n');
         }
+        assert!(closed, "README.md:{}: fence never closed", n + 1);
         if lang == "rust" {
             out.push((heading.clone(), body));
         }
@@ -51,6 +71,7 @@ fn render(readme: &str) -> String {
 //! `tests/readme_sync.rs` fails when this file no longer matches the README.
 
 #![allow(unused)]
+#![deny(unused_must_use)]
 
 use embedded_hal::i2c::ErrorKind;
 use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
@@ -86,11 +107,20 @@ fn readme_examples_match_the_readme() {
         "no ```rust blocks found in README.md"
     );
     let path = root.join(GENERATED);
-    if std::env::var_os("README_UPDATE").is_some() {
+    // Write mode only on exactly README_UPDATE=1, and never in CI, where a
+    // rewrite would turn the drift check into a pass.
+    if std::env::var("README_UPDATE").as_deref() == Ok("1") {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "README_UPDATE=1 is for `just readme`, not CI"
+        );
         std::fs::write(&path, &expected).unwrap();
         return;
     }
-    let actual = std::fs::read_to_string(&path).unwrap_or_default();
+    // Git may check the file out with CRLF line endings on Windows.
+    let actual = std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .replace("\r\n", "\n");
     assert!(
         actual == expected,
         "{GENERATED} does not match README.md; run `just readme`"

@@ -3,6 +3,7 @@
 //! `tests/readme_sync.rs` fails when this file no longer matches the README.
 
 #![allow(unused)]
+#![deny(unused_must_use)]
 
 use embedded_hal::i2c::ErrorKind;
 use embedded_hal_mock::eh1::{delay::NoopDelay, i2c::Mock};
