@@ -57,6 +57,9 @@
 #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
+#[cfg(feature = "sim")]
+extern crate std;
+
 mod addr;
 pub mod chips;
 pub mod codec;
@@ -67,6 +70,9 @@ mod hub;
 mod node;
 pub mod scan;
 pub mod service;
+#[cfg(feature = "sim")]
+#[doc(hidden)]
+pub mod sim;
 pub mod spec;
 
 pub use addr::{Address, NewAddress, Strap};

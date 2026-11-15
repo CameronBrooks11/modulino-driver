@@ -527,7 +527,8 @@ From cheapest to most expensive. Each rung proves only itself.
 2. **Codec vectors.** Every file in `spec/vectors/` runs against the codecs:
    encode, decode and rejection cases, including Vibro off at 12 bytes and
    Buzzer 17987 Hz refused.
-3. **Simulated bus.** `tests/support/` implements `I2c` with a `FakeNode`
+3. **Simulated bus.** `src/sim.rs`, behind the `sim` feature that the
+   tests enable, implements `I2c` with a `FakeNode`
    that follows the firmware's rules (strap byte first, short writes dropped
    silently, `CF` readdresses after a reset, general call), a `FakeHub`
    (TCA9548A), and `FakeChip` register maps with ID registers. Device

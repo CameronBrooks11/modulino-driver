@@ -50,7 +50,8 @@ just drift        # check spec/nodes.toml against the pinned node firmware (clon
 
 ## Constraints
 
-- The library stays `no_std` with no allocation; `std` is for tests only.
+- The library stays `no_std` with no allocation. `std` is for tests and the
+  `sim` feature (`src/sim.rs`, simulated boards) only.
 - Do not copy code from the MPL-2.0 Arduino libraries or firmware; cite facts.
 - Do not add dependencies without justification.
 - Changing a board's address, flashing firmware, or publishing to crates.io
