@@ -129,6 +129,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `sim` feature: `sim::SimBus`, a simulated I2C bus holding simulated node
+  boards (by `Kind`), chips (by `ChipKind`) and TCA9548A hubs (`SimHub`),
+  so the drivers run on a host with no hardware. Every board starts at its
+  default address with plausible, stable readings; output boards keep what
+  was last written (`SimBus::last_write`, and through the opto and latch
+  relays' and the LED matrix's reads); `set_reading` sets inputs;
+  `set_present` takes a board off the bus, where it NACKs with a
+  `SimError`. The `_at` variants name a hub and port, for identical boards
+  behind different ports. `SimBus` is `Send`, and keeps only each board's
+  last frame, so memory stays flat over a long run. It brings in `std`; the
+  default build stays `no_std` with no allocation. The models follow the
+  firmware source and datasheets, have not been checked against hardware,
+  and are outside the semver promise until they are.
 - `service`: `set_address`, `reset_address` and `general_call_reset`, the
   only code that sends the firmware's `CF` command. An address change pads
   `CF` to the board's current write length (48 bytes for a grayscale LED
