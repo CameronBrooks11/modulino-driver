@@ -20,14 +20,16 @@ const SETUP: &str = "    let mut i2c = Mock::new(&[]);
 ///
 /// Only fences this function understands pass: an unindented ``` with
 /// `rust`, `toml`, `sh`, `text` or no info string, closed by a bare ```.
-/// Anything else panics, so a block is never skipped silently.
+/// Any other line holding ``` outside a fence panics (an indented, quoted
+/// or list-item fence, or a longer fence), so no fenced block is skipped
+/// silently. Code in an HTML `<pre>` element is not seen.
 fn blocks(readme: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut heading = String::new();
     let mut lines = readme.lines().enumerate();
     while let Some((n, line)) = lines.next() {
         let trimmed = line.trim();
-        if trimmed.starts_with("~~~") || (trimmed.starts_with("```") && line != trimmed) {
+        if trimmed.starts_with("~~~") || (line.contains("```") && !line.starts_with("```")) {
             panic!("README.md:{}: unsupported fence {line:?}", n + 1);
         }
         if let Some(h) = line.strip_prefix('#') {
