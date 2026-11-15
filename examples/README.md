@@ -1,7 +1,8 @@
 # Examples
 
-Host examples. Each runs with `cargo run --example <name>` against a
-stand-in I2C bus, so it shows how the API fits together without hardware.
+Host examples, run with `cargo run --example <name>`. `multiplexer` runs
+against a stand-in I2C bus, so it shows how the API fits together without
+hardware; `bench` needs real boards on a Linux host.
 
 | Example | What it shows |
 |---|---|
@@ -16,9 +17,9 @@ cargo run --example bench -- buttons   # on a Raspberry Pi, a Buttons board on I
 ## On hardware
 
 Every driver takes any bus that implements `embedded_hal::i2c::I2c` (1.0),
-and the drivers that wait take an `embedded_hal::delay::DelayNs`. To run an
-example on a Linux host (a Raspberry Pi, or a USB-I2C bridge), replace its
-stand-in bus (`DummyI2c`) and error type with a real I2C bus, such as the one
-`linux-embedded-hal` provides, as `bench` does. On a microcontroller
-the examples also need your HAL's entry point and a `no_std` setup. No
-module has been verified on hardware yet.
+and the drivers that wait take an `embedded_hal::delay::DelayNs`. To run
+`multiplexer` on a Linux host (a Raspberry Pi, or a USB-I2C bridge), replace
+its stand-in bus (`DummyI2c`) and error type with a real I2C bus, such as
+the one `linux-embedded-hal` provides, as `bench` does. On a microcontroller
+it also needs your HAL's entry point and a `no_std` setup. No module has
+been verified on hardware yet.

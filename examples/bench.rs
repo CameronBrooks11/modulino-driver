@@ -113,6 +113,18 @@ mod bench {
         sleep(Duration::from_millis(ms));
     }
 
+    /// Run `body`, then `cleanup` whatever `body` returned, so an error
+    /// midway does not leave an actuator running. The body's error wins.
+    fn with_cleanup<T>(
+        dev: &mut T,
+        body: impl FnOnce(&mut T) -> Step,
+        cleanup: impl FnOnce(&mut T) -> Step,
+    ) -> Step {
+        let result = body(dev);
+        let stopped = cleanup(dev);
+        result.and(stopped)
+    }
+
     pub fn main() -> ExitCode {
         let args: Vec<String> = std::env::args().skip(1).collect();
         let Some(command) = args.first() else {
@@ -122,7 +134,12 @@ mod bench {
         let addr = match args.get(1) {
             None => None,
             Some(a) => {
-                let raw = u8::from_str_radix(a.trim_start_matches("0x"), 16).ok();
+                // Always hex, with or without 0x: `bench buttons 3e`.
+                let digits = a
+                    .strip_prefix("0x")
+                    .or_else(|| a.strip_prefix("0X"))
+                    .unwrap_or(a);
+                let raw = u8::from_str_radix(digits, 16).ok();
                 match raw.and_then(Address::new) {
                     Some(addr) => Some(addr),
                     None => {
@@ -134,6 +151,10 @@ mod bench {
         };
         if !COMMANDS.split_whitespace().any(|c| c == command) {
             eprintln!("unknown command {command}\ncommands: {COMMANDS}");
+            return ExitCode::from(2);
+        }
+        if addr.is_some() && ["frames", "scan", "thermo"].contains(&command.as_str()) {
+            eprintln!("{command} takes no address");
             return ExitCode::from(2);
         }
         if command == "nack" {
@@ -219,8 +240,8 @@ mod bench {
         let n = path.trim_start_matches("/dev/i2c-");
         let at = |k: Kind| k.default_address().get();
 
-        println!("# Short write: Vibro on for 5 s, then the first 8 of the 12 off bytes");
-        let on = vibro::encode_on(5000, 60).unwrap();
+        println!("# Short write: Vibro on for 60 s, then the first 8 of the 12 off bytes");
+        let on = vibro::encode_on(60_000, 60).unwrap();
         let off = vibro::encode_off();
         let v = at(Kind::Vibro);
         println!("i2ctransfer -y {n} w{}@{v:#04x} {}", on.len(), hex(&on));
@@ -228,10 +249,12 @@ mod bench {
         println!("# then the full off frame");
         println!("i2ctransfer -y {n} w{}@{v:#04x} {}", off.len(), hex(&off));
 
-        println!("# Over-length write: Buttons LED A on, as 3 + 1 and 3 + 2 bytes, then a read");
-        let leds = buttons::encode_leds(true, false, false);
+        println!("# Over-length write: Buttons LED A as 3 + 1 bytes, then LED B as 3 + 2, each with a read");
         let b = at(Kind::Buttons);
-        for extra in [1usize, 2] {
+        for (extra, leds) in [
+            (1usize, buttons::encode_leds(true, false, false)),
+            (2, buttons::encode_leds(false, true, false)),
+        ] {
             let mut frame = leds.to_vec();
             frame.extend(std::iter::repeat(0).take(extra));
             println!(
@@ -242,7 +265,7 @@ mod bench {
             println!("i2ctransfer -y {n} r4@{b:#04x}");
         }
 
-        println!("# Write-then-read race: a mono border, then the mode read in the same transfer");
+        println!("# Write-then-read race (board in mono mode): a border, then a read in the same transfer");
         let mut border = [[false; led_matrix::COLS]; led_matrix::ROWS];
         for (r, row) in border.iter_mut().enumerate() {
             for (c, px) in row.iter_mut().enumerate() {
@@ -258,7 +281,7 @@ mod bench {
             1 + led_matrix::READ_PAYLOAD
         );
 
-        println!("# Prefix hazard (ASK FIRST: the board stores a new address and reboots):");
+        println!("# Prefix hazard (ASK FIRST: the board erases any stored address and reboots):");
         println!("# Buzzer at 17987 Hz, whose frame starts 'C' 'F'");
         let tone = buzzer::encode_tone(17987, 1000).unwrap();
         let z = at(Kind::Buzzer);
@@ -288,10 +311,16 @@ mod bench {
     fn hub(bus: Bus, addr: Option<Address>) -> Step {
         let bus = RefCell::new(bus);
         let hub = match addr {
-            Some(a) => Hub::with_address(&bus, a).expect("a hub address is 0x70-0x77"),
+            Some(a) => match Hub::with_address(&bus, a) {
+                Some(hub) => hub,
+                None => {
+                    eprintln!("a hub address is 0x70-0x77");
+                    std::process::exit(2);
+                }
+            },
             None => Hub::new(&bus),
         };
-        expect("each port lists the boards plugged into it, and no others");
+        expect("with only the hub on the Pi's bus, each port lists its own boards and no others");
         for port in 0..8 {
             let mut port_bus = hub.port(port).unwrap();
             let mut found = [Found::Unknown(Address::new(1).unwrap()); 16];
@@ -309,17 +338,22 @@ mod bench {
         };
         b.verify()?;
         expect("each LED lights while its button is held; presses print");
-        let mut last = None;
-        for_ten_seconds(|| {
-            let s = b.read()?;
-            b.set_leds(s.a, s.b, s.c)?;
-            if last != Some((s.a, s.b, s.c)) {
-                println!("a={} b={} c={}", s.a, s.b, s.c);
-                last = Some((s.a, s.b, s.c));
-            }
-            Ok(())
-        })?;
-        b.set_leds(false, false, false)
+        with_cleanup(
+            &mut b,
+            |b| {
+                let mut last = None;
+                for_ten_seconds(|| {
+                    let s = b.read()?;
+                    b.set_leds(s.a, s.b, s.c)?;
+                    if last != Some((s.a, s.b, s.c)) {
+                        println!("a={} b={} c={}", s.a, s.b, s.c);
+                        last = Some((s.a, s.b, s.c));
+                    }
+                    Ok(())
+                })
+            },
+            |b| b.set_leds(false, false, false),
+        )
     }
 
     fn buzzer(bus: Bus, addr: Option<Address>) -> Step {
@@ -329,11 +363,17 @@ mod bench {
         };
         b.verify()?;
         expect("440 Hz for 0.5 s, silence, C5 for 0.5 s, then silence");
-        b.tone(440, 500)?;
-        pause(1000);
-        b.play_note(Note::C5, 500)?;
-        pause(1000);
-        b.no_tone()
+        with_cleanup(
+            &mut b,
+            |b| {
+                b.tone(440, 500)?;
+                pause(1000);
+                b.play_note(Note::C5, 500)?;
+                pause(1000);
+                Ok(())
+            },
+            |b| b.no_tone(),
+        )
     }
 
     fn vibro(bus: Bus, addr: Option<Address>) -> Step {
@@ -343,14 +383,20 @@ mod bench {
         };
         v.verify()?;
         expect("medium buzz for 0.5 s; then a 5 s buzz that off() stops after 1 s");
-        v.on(500, PowerLevel::Medium)?;
-        pause(1500);
-        v.on_with_power(5000, 60)?;
-        pause(1000);
-        v.off()?;
-        expect("still now (off() sent 12 bytes)");
-        pause(2000);
-        Ok(())
+        with_cleanup(
+            &mut v,
+            |v| {
+                v.on(500, PowerLevel::Medium)?;
+                pause(1500);
+                v.on_with_power(5000, 60)?;
+                pause(1000);
+                v.off()?;
+                expect("still now (off() sent 12 bytes)");
+                pause(2000);
+                Ok(())
+            },
+            |v| v.off(),
+        )
     }
 
     fn knob(bus: Bus, addr: Option<Address>) -> Step {
@@ -378,19 +424,27 @@ mod bench {
             None => Pixels::new(bus),
         };
         p.verify()?;
-        expect("all LEDs blue, dim, for 1 s");
-        p.set_all(Color::BLUE, 10)?;
-        p.show()?;
-        pause(1000);
-        expect("one red LED walks from the first to the last");
-        for i in 0..8 {
-            p.clear_all();
-            p.set(i, Color::RED, 25)?;
-            p.show()?;
-            pause(300);
-        }
-        p.clear_all();
-        p.show()?;
+        with_cleanup(
+            &mut p,
+            |p| {
+                expect("all LEDs blue, dim, for 1 s");
+                p.set_all(Color::BLUE, 10)?;
+                p.show()?;
+                pause(1000);
+                expect("one red LED walks from the first to the last");
+                for i in 0..8 {
+                    p.clear_all();
+                    p.set(i, Color::RED, 25)?;
+                    p.show()?;
+                    pause(300);
+                }
+                Ok(())
+            },
+            |p| {
+                p.clear_all();
+                p.show()
+            },
+        )?;
         expect("all off");
         Ok(())
     }
@@ -401,7 +455,7 @@ mod bench {
             None => Joystick::new(bus),
         };
         j.verify()?;
-        expect("centre prints (0, 0); right is +x, up is +y; press prints pressed");
+        expect("centre prints (0, 0); record which way gives +x and +y; press prints pressed");
         let mut last = None;
         for_ten_seconds(|| {
             let s = j.read()?;
@@ -420,10 +474,16 @@ mod bench {
         };
         r.verify()?;
         expect("relay on for 1 s (its LED lights), then off");
-        r.on()?;
-        println!("is_on after on(): {}", r.is_on()?);
-        pause(1000);
-        r.off()?;
+        with_cleanup(
+            &mut r,
+            |r| {
+                r.on()?;
+                println!("is_on after on(): {}", r.is_on()?);
+                pause(1000);
+                Ok(())
+            },
+            |r| r.off(),
+        )?;
         println!("is_on after off(): {}", r.is_on()?);
         Ok(())
     }
@@ -452,30 +512,37 @@ mod bench {
         };
         m.verify()?;
         println!("mode at start: {:?}", m.mode()?);
-        expect("mono: a border around the 12 x 8 matrix for 2 s");
-        let mut border = [[false; 12]; 8];
-        for (r, row) in border.iter_mut().enumerate() {
-            for (c, px) in row.iter_mut().enumerate() {
-                *px = r == 0 || r == 7 || c == 0 || c == 11;
-            }
-        }
-        m.set_mode(MatrixMode::Mono)?;
-        m.show_mono(&border)?;
-        pause(2000);
-        expect("grayscale: brightness rising from left (off) to right (full) for 2 s");
-        let mut ramp = [[0u8; 12]; 8];
-        for row in ramp.iter_mut() {
-            for (c, level) in row.iter_mut().enumerate() {
-                *level = (c as u8 * 15) / 11;
-            }
-        }
-        m.set_mode(MatrixMode::Grayscale)?;
-        m.show_gray(&ramp)?;
-        println!("mode now: {:?}", m.mode()?);
-        pause(2000);
-        m.set_mode(MatrixMode::Mono)?;
-        m.show_mono(&[[false; 12]; 8])?;
-        expect("blank, mono");
+        with_cleanup(
+            &mut m,
+            |m| {
+                expect("mono: a border around the 12 x 8 matrix for 2 s");
+                let mut border = [[false; 12]; 8];
+                for (r, row) in border.iter_mut().enumerate() {
+                    for (c, px) in row.iter_mut().enumerate() {
+                        *px = r == 0 || r == 7 || c == 0 || c == 11;
+                    }
+                }
+                m.set_mode(MatrixMode::Mono)?;
+                m.show_mono(&border)?;
+                pause(2000);
+                expect("grayscale: brightness rising across the columns, off to full, for 2 s; record which side is full");
+                let mut ramp = [[0u8; 12]; 8];
+                for row in ramp.iter_mut() {
+                    for (c, level) in row.iter_mut().enumerate() {
+                        *level = (c as u8 * 15) / 11;
+                    }
+                }
+                m.set_mode(MatrixMode::Grayscale)?;
+                m.show_gray(&ramp)?;
+                pause(2000);
+                Ok(())
+            },
+            |m| {
+                m.set_mode(MatrixMode::Mono)?;
+                m.show_mono(&[[false; 12]; 8])
+            },
+        )?;
+        expect("blank, and left in mono mode");
         Ok(())
     }
 
@@ -488,29 +555,41 @@ mod bench {
         if stepper {
             m.set_mode(MotorMode::Stepper)?;
             expect("the stepper turns 200 steps (one turn on a 200-step motor) in 1 s, then holds");
-            m.step(200, 50, 0)?;
-            for _ in 0..15 {
-                let s = m.status()?;
-                println!(
-                    "busy={} a={} b={}",
-                    s.busy, s.current_a_raw, s.current_b_raw
-                );
-                pause(100);
-            }
-            m.release_coils()?;
+            with_cleanup(
+                &mut m,
+                |m| {
+                    m.step(200, 50, 0)?;
+                    for _ in 0..15 {
+                        let s = m.status()?;
+                        println!(
+                            "busy={} a={} b={}",
+                            s.busy, s.current_a_raw, s.current_b_raw
+                        );
+                        pause(100);
+                    }
+                    Ok(())
+                },
+                |m| m.release_coils(),
+            )?;
             expect("coils released: the shaft turns freely by hand");
         } else {
             m.set_mode(MotorMode::Dc)?;
             expect(
                 "A forward and B reverse at a quarter speed for 1 s, then the reverse, then stop",
             );
-            m.set_speeds(8192, -8192)?;
-            pause(500);
-            println!("{:?}", m.status()?);
-            pause(500);
-            m.set_speeds(-8192, 8192)?;
-            pause(1000);
-            m.stop()?;
+            with_cleanup(
+                &mut m,
+                |m| {
+                    m.set_speeds(8192, -8192)?;
+                    pause(500);
+                    println!("{:?}", m.status()?);
+                    pause(500);
+                    m.set_speeds(-8192, 8192)?;
+                    pause(1000);
+                    Ok(())
+                },
+                |m| m.stop(),
+            )?;
             println!("{:?}", m.status()?);
         }
         Ok(())
@@ -569,6 +648,15 @@ mod bench {
         println!("chip at {:?}", m.address());
         expect("flat and still: acceleration near (0, 0, 1) g, rotation near 0 dps");
         for _ in 0..10 {
+            // A fresh sample each time, at 104 Hz.
+            let start = Instant::now();
+            while !(m.acceleration_ready()? && m.angular_velocity_ready()?) {
+                if start.elapsed() > Duration::from_millis(100) {
+                    println!("no new sample in 100 ms");
+                    break;
+                }
+                pause(2);
+            }
             let a = m.acceleration()?;
             let g = m.angular_velocity()?;
             println!(
@@ -646,6 +734,30 @@ mod bench {
             let enxio = ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address);
             assert_eq!(kinds(6), (enxio, enxio));
             assert_eq!(kinds(5), (ErrorKind::Bus, ErrorKind::Bus));
+        }
+
+        #[test]
+        fn an_io_eremoteio_becomes_a_nack_too() {
+            let host = I2CError::from(LinuxI2CError::Io(std::io::Error::from_raw_os_error(121)));
+            assert_eq!(
+                i2c::Error::kind(&BusError(host)),
+                ErrorKind::NoAcknowledge(NoAcknowledgeSource::Unknown)
+            );
+        }
+
+        #[test]
+        fn cleanup_runs_after_a_failed_body_and_its_error_wins() {
+            let mut stopped = false;
+            let result = with_cleanup(
+                &mut stopped,
+                |_| Err(Error::Timeout),
+                |stopped| {
+                    *stopped = true;
+                    Err(Error::DataError)
+                },
+            );
+            assert!(stopped, "cleanup ran");
+            assert!(matches!(result, Err(Error::Timeout)));
         }
     }
 }
