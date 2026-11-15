@@ -64,9 +64,9 @@ the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's
 | `i2c-gpio` (bit-banged overlay) | any Pi, if configured | `ENXIO` (`i2c-algo-bit.c:486, 493, 514`); `EIO` for a data NACK (`367, 505, 568, 579`) | `NoAcknowledge`; `Bus` for a data NACK |
 
 The `bench` bus maps `EREMOTEIO` to a NACK so the device steps do not depend
-on this. If 1.1 shows `host kind: Other`, then `scan`, the address-change
-checks and the SHT31 retry fail on a plain `I2cdev` at the first NACK, and
-the README needs to say so.
+on this. The README's Discovery section says what fails on a plain
+`I2cdev` if 1.1 shows `host kind: Other`; if it shows `NoAcknowledge`,
+that note comes out.
 
 ## 2. Discovery
 
