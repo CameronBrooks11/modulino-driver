@@ -74,7 +74,7 @@ jobs:
         run: cargo check --target ${{ matrix.target }} --features defmt
 
   # The declared rust-version (Cargo.toml), library only: the
-  # dev-dependencies need a newer toolchain.
+  # dev-dependencies need 1.85 (dev-toolchain below).
   msrv:
     name: MSRV (1.75)
     runs-on: ubuntu-latest

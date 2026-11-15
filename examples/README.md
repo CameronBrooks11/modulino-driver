@@ -14,6 +14,9 @@ cargo run --example multiplexer
 cargo run --example bench -- buttons   # on a Raspberry Pi, a Buttons board on I2C 1
 ```
 
+The examples need Rust 1.85 or later (see the MSRV section of the
+[README](../README.md#minimum-supported-rust-version-msrv)).
+
 ## On hardware
 
 Every driver takes any bus that implements `embedded_hal::i2c::I2c` (1.0),
