@@ -377,14 +377,22 @@ See the `scan` module docs for the remaining limits.
 (bench step 1.1 settles it): the Pi's I2C drivers report an
 unacknowledged address as `EREMOTEIO`, which `linux-embedded-hal` 0.5
 reports as `ErrorKind::Other`, not `NoAcknowledge`. This crate tells an
-empty address from a fault only by `NoAcknowledge`. Over a plain `I2cdev`,
-`scan` then stops at the first empty address with an error;
-`service::set_address` and `reset_address` fail their check that the
-target address is free;
-`service::general_call_reset` returns a NACKed frame as an error; and a
-Thermo with an SHT31 may fail `verify()`, whose status read after the
-command is retried only on `NoAcknowledge` (whether the SHT31 NACKs that
-read is not measured). Wrap the bus so that errno 121 maps to `NoAcknowledge`, as the bench
+empty address from a fault only by `NoAcknowledge`, so over a plain
+`I2cdev`:
+
+- `scan` stops with an error at the first empty address.
+- `service::set_address` and `reset_address` fail their check that the
+  target address is free, whenever the board has to move.
+- `service::general_call_reset` returns an error if any of its frames is
+  NACKed: at least on a segment where no board answers, where it should
+  return `Ok(false)`. Whether a board NACKs another kind's frame length is
+  not measured.
+- A Thermo with an SHT31 may fail `verify()` or `read()`: each retries a
+  read only on `NoAcknowledge`, and whether the SHT31 NACKs those reads
+  (just after the status command, or while a measurement runs past its
+  15 ms wait) is not measured.
+
+Wrap the bus so that errno 121 maps to `NoAcknowledge`, as the bench
 example does (`BusError` in `examples/bench.rs`). The table in
 [docs/bench.md](docs/bench.md) gives each Pi model's driver.
 
