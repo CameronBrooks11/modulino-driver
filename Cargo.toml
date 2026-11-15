@@ -22,7 +22,7 @@ embedded-hal = "1.0"
 embedded-hal-mock = "0.11"
 # The tests use the crate's simulated boards (src/sim.rs).
 modulino-driver = { path = ".", features = ["sim"] }
-toml = { version = "0.9.6", default-features = false, features = ["parse", "serde"] }
+toml = { version = "1.2.1", default-features = false, features = ["parse", "serde"] }
 
 # The bench example talks to real boards through Linux's I2C device files.
 # Only its I2C support: the default serial feature needs libudev.
@@ -42,7 +42,7 @@ defmt = ["dep:defmt"]
 sim = []
 
 [dependencies.defmt]
-version = "0.3"
+version = "1.0"
 optional = true
 
 [package.metadata.docs.rs]
