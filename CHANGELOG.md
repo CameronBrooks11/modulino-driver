@@ -127,6 +127,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `service`: `set_address`, `reset_address` and `general_call_reset`, the
+  only code that sends the firmware's `CF` command. An address change pads
+  `CF` to the board's current write length (48 bytes for a grayscale LED
+  matrix), refuses a target address that already answers
+  (`Error::InvalidAddress`), waits 500 ms for the reboot and confirms the
+  board at its new address before moving the `Node`. `general_call_reset`
+  sends `CF 0x00` to address 0 once per node write length, shortest first,
+  so every kind meets a frame of its own length.
 - `spec/nodes.toml` and its mirror `spec`: node protocol constants with
   firmware citations, checked against each other by a test.
 - Every public data type, the `spec` types included, derives

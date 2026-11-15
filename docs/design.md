@@ -381,14 +381,31 @@ matters in practice.
 
 The only code that sends `CF`, `DIE` or general call.
 
-- `set_address(node, new: NewAddress, delay)`: pads `CF` to the board's
-  current write length (48 for a grayscale matrix), waits for the reset
-  (500 ms default, as AddressChanger does, `AddressChanger.ino:151`), then
-  confirms the strap at the new address. Returns the new `Node`.
-- `reset_address(node, delay)`: `CF 0x00`, which the firmware treats as
-  "back to the strap default" (`main.c:165-167`).
+A node acts on a `CF` frame of exactly its write length: it stores the
+third byte in flash as its 8-bit address and resets (`main.c:238-253`). At
+boot it uses a stored byte other than 0x00 or 0xFF that passes its check
+byte, and its strap otherwise (`main.c:160-167`). Both functions below take
+`&mut Node` and move it only once the board is confirmed at the new
+address, so a failed change leaves the caller with the old handle and its
+bus.
+
+- `set_address(node, new: NewAddress, delay)`: identifies the board, does
+  nothing if `new` is already its address, and refuses with
+  `InvalidAddress` if anything answers at `new`, so no two devices end up
+  sharing it. Then sends `CF new<<1` padded to the board's current write
+  length (48 for a grayscale matrix, read from the board), waits 500 ms (as
+  AddressChanger does, `AddressChanger.ino:151`), and confirms the strap at
+  `new`.
+- `reset_address(node, delay)`: the same with `CF 0x00`, which returns the
+  board to the default of its own strap (a Knob strapped 0x76 goes to 0x3B).
 - `general_call_reset(bus, delay)`: `CF 0x00` to address 0x00, which resets
-  every node on the bus. Named separately because it touches every board.
+  every node on the bus. Named separately because it touches every board and
+  checks nothing first. A general call reaches every node through its usual
+  receive path (`main.c:571-580`), so each acts only on a frame of its own
+  length. The frame goes out once per distinct length, shortest first: each
+  board meets its own length before any longer frame, and is rebooting by
+  the time the longer ones arrive. Returns whether any frame was
+  acknowledged.
 - Bootloader entry (`DIE`) and firmware update are deferred (section 9).
 
 ### 4.9 Errors
@@ -417,8 +434,9 @@ identity mismatch (Light, Movement, Pressure), which is now `WrongChip`; a
 device that does not answer was already the bus error. `InvalidParameter`
 became `OutOfRange` for values, `FrameLength` for an LED matrix frame of the
 wrong length, and `None` from `Hub::port` for a port above 7; its pixel
-coordinate checks went with the framebuffer API. `InvalidAddress` stays for the service module (M7), whose address-in-use
-check is its likely first user. `DataError` stays, narrowed to a reply the
+coordinate checks went with the framebuffer API. `InvalidAddress` is the
+service module's: an address change refused because the target already
+answers. `DataError` stays, narrowed to a reply the
 protocol does not define or a corrupted one: an LED matrix mode other than
 `MON` or `GS4`, an SHT31 measurement whose CRC fails, or a VL53L4
 oscillator or PLL calibration reading of 0. A `defmt` feature derives

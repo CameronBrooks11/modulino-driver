@@ -66,6 +66,7 @@ mod error;
 mod hub;
 mod node;
 pub mod scan;
+pub mod service;
 pub mod spec;
 
 pub use addr::{Address, NewAddress, Strap};

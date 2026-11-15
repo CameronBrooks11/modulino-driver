@@ -48,6 +48,11 @@ pub struct FakeNode {
     /// Writes still to fail: the board NACKs each one and processes
     /// nothing, as a busy or resetting board would.
     pub fail_writes: usize,
+    /// Rebooting after a `CF`: the log length when it reset. The board does
+    /// not answer until a delay is logged after that point, the way a real
+    /// board stores its address and reboots (main.c:238-253). Only modelled
+    /// when the bus has a log.
+    pub reboot_mark: Option<usize>,
     /// `Some(grayscale)` for an LED matrix, whose write length and read
     /// payload follow its mode (main.c:324-338, 506-516, 555-556).
     pub matrix_grayscale: Option<bool>,
@@ -81,6 +86,7 @@ impl FakeNode {
             long: 0,
             address_changes: 0,
             fail_writes: 0,
+            reboot_mark: None,
             matrix_grayscale: None,
         }
     }
@@ -384,7 +390,8 @@ impl FakeBus {
     /// reaches every board but no hub.
     fn targets<'a>(&'a mut self, addr: u8, out: &mut Vec<Target<'a>>) {
         for node in self.nodes.iter_mut() {
-            if addr == 0 || node.addr == addr {
+            // A rebooting board answers nothing.
+            if (addr == 0 || node.addr == addr) && node.reboot_mark.is_none() {
                 out.push(Target::Node(node));
             }
         }
@@ -424,7 +431,17 @@ impl I2c for FakeBus {
         self.transactions += 1;
         if let Some(log) = &self.log {
             log.borrow_mut().push(Event::Bus(address));
+            // A delay logged since a board's reset ends its reboot.
+            let log = log.borrow();
+            for node in self.nodes.iter_mut() {
+                if let Some(mark) = node.reboot_mark {
+                    if log[mark..].iter().any(|e| matches!(e, Event::Delay(_))) {
+                        node.reboot_mark = None;
+                    }
+                }
+            }
         }
+        let log = self.log.clone();
         let mut targets = Vec::new();
         self.targets(address, &mut targets);
         if targets.is_empty()
@@ -449,7 +466,13 @@ impl I2c for FakeBus {
                     }
                     for t in targets.iter_mut() {
                         match t {
-                            Target::Node(n) => n.write(data),
+                            Target::Node(n) => {
+                                let changes = n.address_changes;
+                                n.write(data);
+                                if n.address_changes > changes {
+                                    n.reboot_mark = log.as_ref().map(|l| l.borrow().len());
+                                }
+                            }
                             Target::Chip(c) => c.write(data),
                             Target::Hub(control, writes) => {
                                 if let Some(&last) = data.last() {

@@ -11,7 +11,8 @@ use crate::spec::{ChipKind, Kind};
 pub enum Error<E> {
     /// I2C communication error
     I2c(E),
-    /// Invalid address provided
+    /// An address change was refused because something already answers at
+    /// the target address; nothing was sent.
     InvalidAddress,
     /// Value out of range
     OutOfRange,
@@ -59,7 +60,7 @@ impl<E: fmt::Debug> fmt::Display for Error<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::I2c(e) => write!(f, "I2C error: {:?}", e),
-            Error::InvalidAddress => write!(f, "Invalid I2C address"),
+            Error::InvalidAddress => write!(f, "target address already in use"),
             Error::OutOfRange => write!(f, "Value out of range"),
             Error::Timeout => write!(f, "Operation timed out"),
             Error::DataError => write!(f, "reply not defined by the protocol"),
