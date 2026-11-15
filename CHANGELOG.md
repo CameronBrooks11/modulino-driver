@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   breaking release.
 - `spec::NODES` and `spec::CHIPS` are `&'static [NodeSpec]` and
   `&'static [ChipSpec]`, not arrays, so a new board does not change
-  their type.
+  their type. `for n in NODES` now yields `&NodeSpec`, and array-only
+  uses such as `NODES.map(..)` no longer compile.
 - `chips::hs3003::ADDRESS` and `chips::sht31::ADDRESS` are `Address`,
   not `u8`.
 - `Address` and `NewAddress` print in hex under `Debug`
