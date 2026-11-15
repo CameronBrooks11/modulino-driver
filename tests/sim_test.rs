@@ -448,9 +448,6 @@ fn nested_hubs_are_reached_by_their_own_address() {
         is_nack(&b.read().unwrap_err()),
         "the inner hub is off the bus"
     );
-    drop(b);
-    drop(inner_hub);
-    drop(outer_port);
     assert!(bus.borrow_mut().set_present_at(outer, 2, inner, true));
     let outer_port = RefCell::new(outer_hub.port(2).unwrap());
     let inner_hub = Hub::with_address(&outer_port, inner).unwrap();
@@ -458,9 +455,6 @@ fn nested_hubs_are_reached_by_their_own_address() {
     let s = b.read().unwrap();
     assert!(s.a && s.b && !s.c, "{s:?}");
     b.set_leds(false, true, false).unwrap();
-    drop(b);
-    drop(inner_hub);
-    drop(outer_port);
     assert_eq!(
         bus.borrow().last_write_at(inner, 0, buttons),
         Some(&[0, 1, 0][..])
