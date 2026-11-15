@@ -48,11 +48,17 @@ pub struct FakeNode {
     /// Writes still to fail: the board NACKs each one and processes
     /// nothing, as a busy or resetting board would.
     pub fail_writes: usize,
-    /// Rebooting after a `CF`: the log length when it reset. The board does
-    /// not answer until a delay is logged after that point, the way a real
-    /// board stores its address and reboots (main.c:238-253). Only modelled
-    /// when the bus has a log.
-    pub reboot_mark: Option<usize>,
+    /// A `CF` taken and not yet acted on: the new 7-bit address and the log
+    /// length when the frame arrived. The board keeps listening at its old
+    /// address, since it acts on the command from its main loop
+    /// (main.c:219-221, 238-253), and is at the new one once a delay is
+    /// logged after that point. When it stops listening and reboots in
+    /// between is unverified, so the driver must not depend on either.
+    /// Only modelled when the bus has a log; without one the address
+    /// changes at once.
+    pub pending: Option<(u8, usize)>,
+    /// The length of every `CF` frame the board received, as sent.
+    pub cf_lengths: Vec<usize>,
     /// `Some(grayscale)` for an LED matrix, whose write length and read
     /// payload follow its mode (main.c:324-338, 506-516, 555-556).
     pub matrix_grayscale: Option<bool>,
@@ -86,7 +92,8 @@ impl FakeNode {
             long: 0,
             address_changes: 0,
             fail_writes: 0,
-            reboot_mark: None,
+            pending: None,
+            cf_lengths: Vec::new(),
             matrix_grayscale: None,
         }
     }
@@ -116,6 +123,9 @@ impl FakeNode {
         }
         if data.len() > self.write_len {
             self.long += 1;
+        }
+        if data.starts_with(b"CF") {
+            self.cf_lengths.push(data.len());
         }
         let data = &data[..self.write_len];
         if data.starts_with(b"DIE") {
@@ -385,13 +395,36 @@ impl FakeBus {
         })
     }
 
+    /// Finish every pending address change, here and behind every hub
+    /// port, that a delay logged since the `CF` has let through.
+    pub fn settle(&mut self) {
+        let Some(log) = self.log.clone() else { return };
+        let log = log.borrow();
+        self.settle_with(&log);
+    }
+
+    fn settle_with(&mut self, log: &[Event]) {
+        for node in self.nodes.iter_mut() {
+            if let Some((new, mark)) = node.pending {
+                if log[mark..].iter().any(|e| matches!(e, Event::Delay(_))) {
+                    node.addr = new;
+                    node.pending = None;
+                }
+            }
+        }
+        for hub in self.hubs.iter_mut() {
+            for port in hub.ports.iter_mut() {
+                port.settle_with(log);
+            }
+        }
+    }
+
     /// Everything that answers `addr` from here: this bus's boards and
     /// hubs, and whatever is on the hubs' connected ports. Address 0
     /// reaches every board but no hub.
     fn targets<'a>(&'a mut self, addr: u8, out: &mut Vec<Target<'a>>) {
         for node in self.nodes.iter_mut() {
-            // A rebooting board answers nothing.
-            if (addr == 0 || node.addr == addr) && node.reboot_mark.is_none() {
+            if addr == 0 || node.addr == addr {
                 out.push(Target::Node(node));
             }
         }
@@ -429,17 +462,9 @@ impl ErrorType for FakeBus {
 impl I2c for FakeBus {
     fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), Nack> {
         self.transactions += 1;
+        self.settle();
         if let Some(log) = &self.log {
             log.borrow_mut().push(Event::Bus(address));
-            // A delay logged since a board's reset ends its reboot.
-            let log = log.borrow();
-            for node in self.nodes.iter_mut() {
-                if let Some(mark) = node.reboot_mark {
-                    if log[mark..].iter().any(|e| matches!(e, Event::Delay(_))) {
-                        node.reboot_mark = None;
-                    }
-                }
-            }
         }
         let log = self.log.clone();
         let mut targets = Vec::new();
@@ -467,10 +492,12 @@ impl I2c for FakeBus {
                     for t in targets.iter_mut() {
                         match t {
                             Target::Node(n) => {
-                                let changes = n.address_changes;
+                                let (old, changes) = (n.addr, n.address_changes);
                                 n.write(data);
-                                if n.address_changes > changes {
-                                    n.reboot_mark = log.as_ref().map(|l| l.borrow().len());
+                                // With a log, the new address waits for a delay.
+                                if let (true, Some(log)) = (n.address_changes > changes, &log) {
+                                    n.pending = Some((n.addr, log.borrow().len()));
+                                    n.addr = old;
                                 }
                             }
                             Target::Chip(c) => c.write(data),

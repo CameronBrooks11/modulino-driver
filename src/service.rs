@@ -34,6 +34,7 @@ use crate::addr::{Address, NewAddress};
 use crate::chips::acked;
 use crate::codec::led_matrix::{decode_mode, Mode, READ_PAYLOAD as MATRIX_PAYLOAD};
 use crate::node::Node;
+use crate::scan::silent_chip;
 use crate::spec::{WriteLen, NODES};
 use crate::Error;
 
@@ -73,11 +74,16 @@ const fn max_write_len() -> usize {
 /// confirmed there.
 ///
 /// The board is identified first, and nothing is sent if `new` is already
-/// its address. If something else answers at `new`, the result is
-/// [`Error::InvalidAddress`] and nothing is sent, so no two devices end up
-/// sharing an address. The `CF` frame is padded to the board's current
-/// write length (48 bytes for a grayscale LED matrix), then the board gets
+/// its address. If something answers at `new`, including an SHT3x that only
+/// answers its status command, the result is [`Error::AddressInUse`] and
+/// nothing is sent. The `CF` frame is padded to the board's current write
+/// length (48 bytes for a grayscale LED matrix), then the board gets
 /// [`RESET_MS`] to reboot.
+///
+/// The check covers the target, not the source: two boards of one kind at
+/// the same address (two new boards of a kind start at the same default)
+/// both take the command and both move. Connect one board per address when
+/// changing addresses.
 ///
 /// On an error after the command was sent, `node` keeps its old address;
 /// the board may be at either.
@@ -93,8 +99,7 @@ pub fn set_address<I2C: I2c>(
 /// at out of the box, with `CF 0x00`.
 ///
 /// Checks as [`set_address`] does: nothing is sent if the board is already
-/// there, and [`Error::InvalidAddress`] if something else answers at the
-/// default.
+/// there, and [`Error::AddressInUse`] if something answers at the default.
 pub fn reset_address<I2C: I2c>(
     node: &mut Node<I2C>,
     delay: &mut impl DelayNs,
@@ -112,14 +117,26 @@ pub fn reset_address<I2C: I2c>(
 /// its strap default address, then wait [`RESET_MS`].
 ///
 /// Each kind acts only on a frame of its own write length, so the command
-/// goes out once per length, shortest first. A board meets its own length
-/// before any longer frame, and is rebooting by the time the longer ones
-/// arrive. Boards that are already at their default are reset too.
+/// goes out once per length, shortest first. A board takes the first frame
+/// of its own length before it has seen any longer frame. It acts on the
+/// command from its main loop, after erasing a flash page
+/// (main.c:219-221, 238-253), so it may still be listening when the longer
+/// frames arrive. Those carry the same command, but how a board handles a
+/// frame longer than its length is unverified (design section 7). Boards
+/// already at their default are reset too.
 ///
-/// This touches every node on the bus, including any that share an address
-/// with another device after the reset; nothing is checked first. Returns
-/// whether any frame was acknowledged. A NACK is not an error, since a frame
-/// no board takes may be refused.
+/// "The bus" is the segment the call goes out on: through a [`HubPort`],
+/// that is the selected port and the upstream bus it is joined to; on a
+/// bus with a hub, boards behind ports that are not selected are not
+/// reached. Nothing is checked first, so boards that share a default end up
+/// sharing an address.
+///
+/// Every length is sent even if one fails. Returns whether any frame was
+/// acknowledged, or else the first bus error other than a NACK, after the
+/// wait. A NACK is not an error, since a frame no board takes may be
+/// refused.
+///
+/// [`HubPort`]: crate::HubPort
 pub fn general_call_reset<I2C: I2c>(
     bus: &mut I2C,
     delay: &mut impl DelayNs,
@@ -140,13 +157,24 @@ pub fn general_call_reset<I2C: I2c>(
     }
     lengths[..count].sort_unstable();
 
+    // Boards that took an earlier frame are resetting whatever happens to
+    // the later ones, so every length is sent and the wait always runs.
     let frame = command(0x00);
     let mut any = false;
+    let mut first_error = None;
     for &len in &lengths[..count] {
-        any |= acked(bus.write(GENERAL_CALL, &frame[..len]))?;
+        match acked(bus.write(GENERAL_CALL, &frame[..len])) {
+            Ok(acknowledged) => any |= acknowledged,
+            Err(e) => {
+                first_error.get_or_insert(e);
+            }
+        }
     }
     delay.delay_ms(RESET_MS);
-    Ok(any)
+    match first_error {
+        Some(e) => Err(e),
+        None => Ok(any),
+    }
 }
 
 /// Send `CF byte` to the node and confirm it at `target`.
@@ -161,9 +189,8 @@ fn move_to<I2C: I2c>(
         return Ok(());
     }
     let len = write_len(node)?;
-    let mut probe = [0u8; 1];
-    if acked(node.bus().read(target.get(), &mut probe))? {
-        return Err(Error::InvalidAddress);
+    if occupied(node.bus(), target)? {
+        return Err(Error::AddressInUse);
     }
     node.write_command(&command(byte)[..len])?;
     delay.delay_ms(RESET_MS);
@@ -175,6 +202,16 @@ fn move_to<I2C: I2c>(
         return Err(e);
     }
     Ok(())
+}
+
+/// Whether anything answers at `addr`: a 1-byte read, or, at an address an
+/// SHT3x can have, its status command, since it NACKs reads while idle.
+fn occupied<I2C: I2c>(bus: &mut I2C, addr: Address) -> Result<bool, Error<I2C::Error>> {
+    let mut probe = [0u8; 1];
+    if acked(bus.read(addr.get(), &mut probe))? {
+        return Ok(true);
+    }
+    Ok(silent_chip(bus, addr.get())?.is_some())
 }
 
 /// The write length the board takes now. For the LED matrix, the only kind

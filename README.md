@@ -393,7 +393,8 @@ let b = Buttons::with_address(i2c_b, Address::new(0x40).unwrap());
 A node board stores a new address in flash and reboots. The `service`
 module is the only code that sends that command. It refuses an address
 something already answers at, and confirms the board at its new address
-before reporting success:
+before reporting success. Connect one board per address while you do this:
+two identical boards at the same address both take the command.:
 
 ```rust
 use modulino_driver::{service, Buttons, Kind, NewAddress, Node};
@@ -406,8 +407,9 @@ service::set_address(&mut node, NewAddress::new(0x40).unwrap(), &mut delay)?;
 let addr = node.address();
 let mut buttons = Buttons::with_address(node.release(), addr);
 
-// Later: back to the default, or every node on a bus at once
+// Later: back to the default, with a Node built the same way
 // service::reset_address(&mut node, &mut delay)?;
+// Or every node on a bus at once, checking nothing first
 // service::general_call_reset(&mut bus, &mut delay)?;
 ```
 

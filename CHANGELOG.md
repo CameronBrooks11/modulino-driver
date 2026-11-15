@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     values are `OutOfRange` (was `InvalidParameter`).
     `codec::motors::current_ma` converts currents, and `Motors::MAX_SPEED`
     becomes `codec::motors::MAX_DC_SPEED`.
+- `Error::InvalidAddress` is now `Error::AddressInUse`: an address change
+  refused because the target already answers.
 - `Error::DataError` now means a reply the protocol does not define.
 - `Movement` and `Pressure` are the new `chips::Lsm6dsox` and
   `chips::Lps22hb` drivers. `new` no longer does I/O or returns
@@ -131,10 +133,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only code that sends the firmware's `CF` command. An address change pads
   `CF` to the board's current write length (48 bytes for a grayscale LED
   matrix), refuses a target address that already answers
-  (`Error::InvalidAddress`), waits 500 ms for the reboot and confirms the
-  board at its new address before moving the `Node`. `general_call_reset`
-  sends `CF 0x00` to address 0 once per node write length, shortest first,
-  so every kind meets a frame of its own length.
+  (`Error::AddressInUse`, including an idle SHT3x found by its status
+  command), waits 500 ms for the reboot and confirms the board at its new
+  address before moving the `Node`. `general_call_reset` sends `CF 0x00` to
+  address 0 once per node write length, shortest first, so every kind takes
+  a frame of its own length before any longer one; it sends every length and
+  waits even after a bus error.
 - `spec/nodes.toml` and its mirror `spec`: node protocol constants with
   firmware citations, checked against each other by a test.
 - Every public data type, the `spec` types included, derives

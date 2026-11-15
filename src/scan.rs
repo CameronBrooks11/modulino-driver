@@ -125,7 +125,10 @@ pub fn scan_except<I: I2c>(
 }
 
 /// A chip that NACKs reads until commanded: the SHT3x.
-fn silent_chip<I: I2c>(bus: &mut I, raw: u8) -> Result<Option<ChipKind>, Error<I::Error>> {
+pub(crate) fn silent_chip<I: I2c>(
+    bus: &mut I,
+    raw: u8,
+) -> Result<Option<ChipKind>, Error<I::Error>> {
     for chip in CHIPS.iter().filter(|c| c.addresses.contains(&raw)) {
         if matches!(chip.id, ChipId::Sht3xStatus { .. }) && has_id(bus, raw, chip.id)? {
             return Ok(Some(chip.kind));
