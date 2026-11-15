@@ -43,7 +43,7 @@ readme:
 drift:
     #!/usr/bin/env bash
     set -euo pipefail
-    pin=$(sed -n 's/^commit = "\(.*\)"$/\1/p' spec/nodes.toml)
+    pin=$(sed -n '/^\[firmware\]/,/^\[/ s/^commit = "\(.*\)"$/\1/p' spec/nodes.toml)
     dir=target/node_modulino_firmware
     [ -d "$dir/.git" ] || git clone --quiet https://github.com/arduino/node_modulino_firmware "$dir"
     git -C "$dir" checkout --quiet "$pin" 2>/dev/null || { git -C "$dir" fetch --quiet origin; git -C "$dir" checkout --quiet "$pin"; }

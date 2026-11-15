@@ -5,8 +5,11 @@
 //! pin). It compares two things: the `NODE_*` strap defines, and the write
 //! lengths returned by `getReceiveBufferSize()`.
 //!
-//! The extractor is deliberately narrow: it understands the lines main.c has
-//! at the pin and panics on anything else. If a firmware change breaks it,
+//! The extractor is deliberately narrow: in `getReceiveBufferSize()` it
+//! accepts only the line shapes main.c has at the pin (after removing `//`
+//! comments), only `NODE_*` case labels that belong to a kind, and only
+//! Joystick falling through to the `return` after the switch. It panics on
+//! anything else, as on a `NODE_` define line it cannot read. If a firmware change breaks it,
 //! replace it with a reviewed manual check rather than widening it
 //! (docs/design.md section 6).
 
@@ -30,6 +33,10 @@ const KINDS: &[(&str, &[&str])] = &[
     ("motors", &["NODE_MOTOR"]),
 ];
 
+/// Kinds with no `case` in `getReceiveBufferSize()`, which get the `return`
+/// after the switch. Any other kind without a case fails the check.
+const FALLBACK: &[&str] = &["NODE_JOYSTICK"];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Len {
     Fixed(usize),
@@ -47,16 +54,26 @@ fn number(s: &str) -> u64 {
 
 /// `#define NAME VALUE` lines, as written.
 fn defines(source: &str) -> BTreeMap<String, String> {
-    source
-        .lines()
-        .filter_map(|l| l.strip_prefix("#define "))
-        .filter_map(|rest| {
-            let mut parts = rest.split_whitespace();
-            let name = parts.next()?;
-            let value = parts.next()?;
-            Some((name.to_string(), value.to_string()))
-        })
-        .collect()
+    let mut out = BTreeMap::new();
+    for line in source.lines() {
+        let parsed = line
+            .strip_prefix("#define")
+            .filter(|rest| rest.starts_with([' ', '\t']))
+            .and_then(|rest| {
+                let mut parts = rest.split_whitespace();
+                Some((parts.next()?, parts.next()?))
+            });
+        match parsed {
+            Some((name, value)) => {
+                out.insert(name.to_string(), value.to_string());
+            }
+            None if line.contains("define") && line.contains("NODE_") => {
+                panic!("unreadable NODE_ define: {line:?}")
+            }
+            None => {}
+        }
+    }
+    out
 }
 
 /// One `return` expression of `getReceiveBufferSize()`.
@@ -108,6 +125,10 @@ fn lengths(source: &str, defines: &BTreeMap<String, String>) -> (BTreeMap<String
             continue;
         }
         if let Some(label) = line.strip_prefix("case ").and_then(|l| l.strip_suffix(':')) {
+            assert!(
+                KINDS.iter().any(|(_, names)| names.contains(&label)),
+                "case label {label:?} is not a NODE_* name of a kind"
+            );
             pending.push(label.to_string());
             continue;
         }
@@ -205,7 +226,11 @@ fn nodes_toml_matches_pinned_firmware() {
 
         let lens: Vec<Len> = names
             .iter()
-            .map(|n| lengths.get(*n).copied().unwrap_or(fallback))
+            .map(|n| match lengths.get(*n) {
+                Some(len) => *len,
+                None if FALLBACK.contains(n) => fallback,
+                None => panic!("{n} has no case in getReceiveBufferSize()"),
+            })
             .collect();
         for len in lens {
             assert_eq!(spec_len(&row["write_len"]), len, "{kind}: write length");
