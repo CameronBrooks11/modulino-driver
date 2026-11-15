@@ -223,7 +223,7 @@ use modulino_driver::Movement;
 let mut movement = Movement::new(i2c);
 movement.init()?;
 
-// The data registers hold no sample until its ready flag is set
+// Wait for the first sample of each
 while !movement.acceleration_ready()? {}
 let accel = movement.acceleration()?; // in g
 println!("Accel: x={:.2}g, y={:.2}g, z={:.2}g", accel.x, accel.y, accel.z);
@@ -378,10 +378,13 @@ See the `scan` module docs for the remaining limits.
 unacknowledged address as `EREMOTEIO`, which `linux-embedded-hal` 0.5
 reports as `ErrorKind::Other`, not `NoAcknowledge`. This crate tells an
 empty address from a fault only by `NoAcknowledge`. Over a plain `I2cdev`,
-`scan` then stops at the first empty address with an error, a Thermo with
-an SHT31 fails `verify()` (the SHT31 NACKs reads while idle, and the retry
-waits for `NoAcknowledge`), and the address-change checks in `service`
-fail. Wrap the bus so that errno 121 maps to `NoAcknowledge`, as the bench
+`scan` then stops at the first empty address with an error;
+`service::set_address` and `reset_address` fail their check that the
+target address is free;
+`service::general_call_reset` returns a NACKed frame as an error; and a
+Thermo with an SHT31 may fail `verify()`, whose status read after the
+command is retried only on `NoAcknowledge` (whether the SHT31 NACKs that
+read is not measured). Wrap the bus so that errno 121 maps to `NoAcknowledge`, as the bench
 example does (`BusError` in `examples/bench.rs`). The table in
 [docs/bench.md](docs/bench.md) gives each Pi model's driver.
 

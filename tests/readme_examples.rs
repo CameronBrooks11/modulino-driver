@@ -242,7 +242,7 @@ fn block_10() -> Result<(), Error<ErrorKind>> {
     let mut movement = Movement::new(i2c);
     movement.init()?;
 
-    // The data registers hold no sample until its ready flag is set
+    // Wait for the first sample of each
     while !movement.acceleration_ready()? {}
     let accel = movement.acceleration()?; // in g
     println!("Accel: x={:.2}g, y={:.2}g, z={:.2}g", accel.x, accel.y, accel.z);
