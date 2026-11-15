@@ -48,8 +48,12 @@ pub enum WriteLen {
 }
 
 impl WriteLen {
-    /// The single length of a [`WriteLen::Fixed`] kind. Used in constants, so
-    /// calling it on a moded kind fails the build.
+    /// The single length of a [`WriteLen::Fixed`] kind.
+    ///
+    /// # Panics
+    ///
+    /// On a [`WriteLen::Mode`] kind. In a constant, as the crate uses it,
+    /// that fails the build instead.
     pub const fn fixed(self) -> usize {
         match self {
             WriteLen::Fixed(n) => n,

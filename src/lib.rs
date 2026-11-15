@@ -2,6 +2,10 @@
 //!
 //! A layered, hardware-agnostic `no_std` driver for Arduino Modulino boards.
 //!
+//! **Status:** no module has been verified on hardware yet. The protocol
+//! follows the node firmware's source and the chips' datasheets; the
+//! README's module table records each module's bench result.
+//!
 //! This crate provides drivers for the following Modulino devices:
 //!
 //! - [`Buttons`] - Three-button module with LEDs
@@ -45,7 +49,11 @@
 //!
 //! ## Features
 //!
-//! - `defmt`: derive `defmt::Format` on every public data type
+//! - `defmt`: `defmt::Format` on every public data type
+//! - `sim`: simulated boards on a simulated I2C bus (`sim::SimBus`), to
+//!   run the drivers on a host with no hardware. Brings in `std`. Its
+//!   models have not been checked against hardware and are outside the
+//!   semver promise until they are.
 //!
 //! ## Hardware Requirements
 //!

@@ -51,7 +51,7 @@ way.
 | Step | Command | Look for |
 |---|---|---|
 | 1.1 | `nack` (nothing connected) | The `errno`, `host kind` and `bench kind` lines. This answers "Does the Linux host report a NACK as `NoAcknowledge`?" |
-| 1.2 | `i2cdetect -y 1` with all boards on the bus | The addresses present, to compare with 2.1 |
+| 1.2 | `i2cdetect -y -a 1 0x01 0x77` with all boards on the bus | The addresses present, to compare with 2.1. By default `i2cdetect` scans 0x08-0x77 (`man i2cdetect`) and misses the latch relay at 0x02; `-a` allows the addresses below 0x08 |
 
 What 1.1 shows depends on the adapter driver noted in setup step 4. From
 the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's
@@ -64,9 +64,9 @@ the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's
 | `i2c-gpio` (bit-banged overlay) | any Pi, if configured | `ENXIO` (`i2c-algo-bit.c:486, 493, 514`); `EIO` for a data NACK (`367, 505, 568, 579`) | `NoAcknowledge`; `Bus` for a data NACK |
 
 The `bench` bus maps `EREMOTEIO` to a NACK so the device steps do not depend
-on this. If 1.1 shows `host kind: Other`, then `scan`, the address-change
-checks and the SHT31 retry fail on a plain `I2cdev` at the first NACK, and
-the README needs to say so.
+on this. The README's Discovery section says what fails on a plain
+`I2cdev` if 1.1 shows `host kind: Other`; if it shows `NoAcknowledge` on
+`i2c-bcm2835` or `i2c-designware` (setup step 4), that note comes out.
 
 ## 2. Discovery
 

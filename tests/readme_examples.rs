@@ -242,12 +242,13 @@ fn block_10() -> Result<(), Error<ErrorKind>> {
     let mut movement = Movement::new(i2c);
     movement.init()?;
 
-    // Read acceleration (in g)
-    let accel = movement.acceleration()?;
+    // Wait for the first sample of each
+    while !movement.acceleration_ready()? {}
+    let accel = movement.acceleration()?; // in g
     println!("Accel: x={:.2}g, y={:.2}g, z={:.2}g", accel.x, accel.y, accel.z);
 
-    // Read angular velocity (in dps)
-    let gyro = movement.angular_velocity()?;
+    while !movement.angular_velocity_ready()? {}
+    let gyro = movement.angular_velocity()?; // in dps
     println!("Gyro: x={:.2}°/s, y={:.2}°/s, z={:.2}°/s", gyro.x, gyro.y, gyro.z);
     Ok(())
 }
@@ -295,11 +296,12 @@ fn block_12() -> Result<(), Error<ErrorKind>> {
     let mut pressure = Pressure::new(i2c);
     pressure.init()?; // verify, reset, 10 Hz
 
-    // Read atmospheric pressure in hPa
-    let hpa = pressure.pressure()?;
+    // Wait for the first sample
+    while !pressure.pressure_ready()? {}
+    let hpa = pressure.pressure()?; // in hPa
     println!("Pressure: {:.1} hPa", hpa);
 
-    // Read ambient temperature
+    while !pressure.temperature_ready()? {}
     let temp = pressure.temperature()?;
     println!("Temperature: {:.1}°C", temp);
     Ok(())
@@ -318,6 +320,9 @@ fn block_13() -> Result<(), Error<ErrorKind>> {
 
     let mut light = Light::new(i2c);
     light.init()?; // verify, then 18x gain, 16-bit, every 25 ms
+
+    // The registers hold no sample until the first measurement ends
+    while !light.ready()? {}
 
     // All four channels from one measurement, and the lux they give
     let reading = light.read()?;
