@@ -16,9 +16,10 @@ the observed result, not the expected one; a step that does not match its
    `i2ctransfer`.
 2. Install Rust 1.85 or later. The example builds the crate's
    dev-dependencies, which need 1.85; the library alone needs 1.75. On
-   Raspberry Pi OS Trixie, apt's `rustc` is 1.85.1 and will do; on
-   Bookworm it is 1.63, so use rustup (<https://rustup.rs>). Check with
-   `rustc --version`. Then, on the Pi, in a clone of this repository:
+   Raspberry Pi OS Trixie, `sudo apt install cargo` (it brings `rustc`)
+   gives 1.85 and will do; Bookworm's apt `rustc` is 1.63, so use rustup
+   (<https://rustup.rs>). Check with `cargo --version`. Then, on the Pi,
+   in a clone of this repository:
    `cargo build --example bench` (no cross-compiling needed).
 3. Run each command as
    `cargo run --example bench -- <command> [address]`. The bus is
