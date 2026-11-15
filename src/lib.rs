@@ -19,7 +19,7 @@
 //! - [`Light`] - RGB and ambient light sensor
 //! - [`OptoRelay`] - Solid-state relay module
 //! - [`Hub`] - TCA9548A I2C multiplexer; each [`HubPort`] is an I2C bus
-//! - [`Motors`] - Dual DC or stepper motor driver (experimental)
+//! - [`Motors`] - Dual DC or stepper motor driver
 //!
 //! ## Example
 //!

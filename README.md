@@ -5,8 +5,9 @@ boards, for any host with an `embedded-hal` 1.0 I2C implementation.
 
 **Status: pre-release.** The crate is being restructured around the node
 protocol the Modulino firmware speaks; [docs/design.md](docs/design.md) has
-the architecture and milestones. Until 0.1.0 the API below is the one
-inherited from modulino-rs 0.3.0 and will change.
+the architecture and milestones. The API below is the restructured one
+described there; it may still change before 0.1.0. No module has been
+verified on hardware yet.
 
 ## Origin
 
@@ -29,11 +30,11 @@ Apache-2.0 licence.
 | `LatchRelay` | STM32C011 node | **Internal** | 0x02 |
 | `Vibro` | STM32C011 node | **Internal** | 0x38 |
 | `LedMatrix` | STM32C011 node | **Internal** | 0x39 |
-| `Pressure` | LPS22HB | **Internal (Experimental)** | 0x5C |
+| `Pressure` | LPS22HB | **Internal** | 0x5C |
 | `Light` | LTR-381RGB | **Internal** | 0x53 |
-| `OptoRelay` | STM32C011 node | **Internal (Experimental)** | 0x14 |
+| `OptoRelay` | STM32C011 node | **Internal** | 0x14 |
 | `Hub` | TCA9548A | **Internal** | 0x70 |
-| `Motors` | STM32C011 node | **Internal (Experimental)** | 0x24 |
+| `Motors` | STM32C011 node | **Internal** | 0x24 |
 
 A node board runs Arduino's `node_modulino_firmware` on an STM32C011 and
 drives its LEDs, buttons or motors itself; the host talks only to the
@@ -294,7 +295,7 @@ assert!(relay.is_on()?);
 relay.off()?;
 ```
 
-### Example: Motors Control (Experimental)
+### Example: Motors Control
 
 ```rust
 use modulino_driver::{Motors, MotorMode};
@@ -380,11 +381,11 @@ Some modules can have their address changed. You can specify a custom address wh
 ```rust
 use modulino_driver::{Address, Buttons};
 
-// Use default address
-let buttons = Buttons::new(i2c);
+// Default address
+let a = Buttons::new(i2c_a);
 
-// Use custom address (7-bit, 0x01..=0x77)
-let buttons = Buttons::with_address(i2c, Address::new(0x40).unwrap());
+// A custom address (7-bit, 0x01..=0x77), here on a second bus
+let b = Buttons::with_address(i2c_b, Address::new(0x40).unwrap());
 ```
 
 ## Minimum Supported Rust Version (MSRV)
