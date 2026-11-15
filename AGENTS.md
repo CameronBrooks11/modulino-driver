@@ -16,7 +16,8 @@ modulino-rs 0.3.0 and is being restructured per
 - **Tests**: `cargo test`, `embedded-hal-mock`
 - **CI**: fmt, clippy `-D warnings`, docs `-D warnings`, tests, `cargo check` for
   `thumbv6m-none-eabi`, `thumbv7em-none-eabihf`, `riscv32imac-unknown-none-elf`,
-  `cargo check --lib` at the declared MSRV (1.75), `cargo audit`
+  `cargo check --lib` at the declared MSRV (1.75), a build of all targets
+  on 1.85 (the tests' and examples' floor), `cargo audit`
 
 ## Layout
 
