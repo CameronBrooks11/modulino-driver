@@ -34,6 +34,7 @@ just setup        # rustfmt + clippy components
 just fmt          # format
 just check        # fmt-check + clippy + docs (CI-equivalent)
 just test         # run tests
+just readme       # regenerate tests/readme_examples.rs after editing README code
 ```
 
 ## Conventions

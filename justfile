@@ -34,3 +34,7 @@ check: fmt-check lint doc
 # Run tests
 test:
     cargo test --workspace
+
+# Regenerate tests/readme_examples.rs from the README's Rust blocks
+readme:
+    README_UPDATE=1 cargo test --test readme_sync
