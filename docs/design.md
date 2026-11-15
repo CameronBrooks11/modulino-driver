@@ -113,8 +113,8 @@ Three rest on firmware behaviour that only the bench confirms. Vibro
 `off()` and AddressChanger's 40-byte `CF` depend on the exact-length rule,
 which section 7 tests through Vibro ("Is a short write really dropped?");
 the `CF`/`DIE` row depends on the prefix check ("Does the prefix hazard
-reproduce?"). The other six are in library code, which this crate's layers
-remove by construction, so they need no hardware to check.
+reproduce?"). The other six are defects in library code, visible by reading
+it, so they need no hardware to check.
 
 ## 3. Architecture
 
