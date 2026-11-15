@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Actions in the CI workflow, pinned to commit SHAs with the tag in a
+  # comment; Dependabot moves both.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The crate's dependencies. Cargo.lock is committed, so the lock is what
+  # moves. CI's msrv (1.75, library) and dev-toolchain (1.85, tests and
+  # examples) jobs fail an update that raises either floor.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      cargo:
+        patterns: ["*"]
