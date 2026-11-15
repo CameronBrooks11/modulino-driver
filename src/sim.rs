@@ -320,9 +320,34 @@ pub struct FakeChip {
     pub absent: bool,
     /// Keep every write in `writes`; off, none are kept.
     pub history: bool,
+    /// Where the chip shows that data is ready, if it does.
+    pub ready_flag: Option<ReadyFlag>,
+    /// Hold the data-ready flag at "no data", whatever the registers say.
+    pub held: bool,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
+}
+
+#[doc(hidden)]
+/// Where a chip shows that a new sample is ready.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadyFlag {
+    /// These bits of `register` are set while data is ready.
+    Bits {
+        /// The status register.
+        register: u16,
+        /// The data-ready bits.
+        mask: u8,
+    },
+    /// Bit 0 of `status` is the data-ready level, active low when bit 4 of
+    /// `polarity` is set, as on the VL53L4CD/ED.
+    Level {
+        /// The level register (GPIO__TIO_HV_STATUS).
+        status: u16,
+        /// The polarity register (GPIO_HV_MUX__CTRL).
+        polarity: u16,
+    },
 }
 
 impl FakeChip {
@@ -339,9 +364,33 @@ impl FakeChip {
             writes: Vec::new(),
             absent: false,
             history: true,
+            ready_flag: None,
+            held: false,
             pointer: 0,
             reply: None,
             not_ready: 0,
+        }
+    }
+
+    /// The same chip showing data ready at `flag`.
+    pub fn ready_flag(mut self, flag: ReadyFlag) -> Self {
+        self.ready_flag = Some(flag);
+        self
+    }
+
+    /// What a read of `register` returns, given its stored `value`: the
+    /// value, with the data-ready flag at "no data" while held.
+    fn shown(&self, register: u16, value: u8) -> u8 {
+        if !self.held {
+            return value;
+        }
+        match self.ready_flag {
+            Some(ReadyFlag::Bits { register: r, mask }) if r == register => value & !mask,
+            Some(ReadyFlag::Level { status, polarity }) if status == register => {
+                let active_low = self.regs.get(&polarity).copied().unwrap_or(0) & 0x10 != 0;
+                (value & !0x01) | u8::from(active_low)
+            }
+            _ => value,
         }
     }
 
@@ -402,7 +451,8 @@ impl FakeChip {
             return;
         }
         for b in buf.iter_mut() {
-            *b = self.regs.get(&self.pointer).copied().unwrap_or(0);
+            let value = self.regs.get(&self.pointer).copied().unwrap_or(0);
+            *b = self.shown(self.pointer, value);
             self.pointer = self.pointer.wrapping_add(1);
         }
     }
@@ -702,8 +752,9 @@ impl i2c::Error for SimError {
 ///   its gain, and no reading drifts.
 /// - Chip data is ready at once: the ready flags (Light, Pressure,
 ///   Movement, Distance) read set from the start, where a real chip is
-///   expected to have no sample until its first measurement ends. Code that reads
-///   without waiting works here and may not on hardware.
+///   expected to have no sample until its first measurement ends. Code that
+///   reads without waiting works here and may not on hardware;
+///   [`SimBus::set_ready`] holds the flags clear to test the wait.
 /// - The Motors status always reads idle and DC; its commands show only in
 ///   [`SimBus::last_write`].
 /// - A Pixels, Buzzer or Vibro read returns zeros after the strap byte. The
@@ -903,6 +954,47 @@ impl SimBus {
         }
     }
 
+    /// Hold the data-ready flags of the chip at `addr` at "no data"
+    /// (`ready` false), or let them show again (`true`, the default).
+    /// Searches every hub port and acts on the first chip found. Returns
+    /// whether a chip with a data-ready flag is there: Light (DATA_NEW),
+    /// Pressure (P_DA and T_DA), Movement (XLDA and GDA) or Distance (its
+    /// GPIO level, with the polarity the driver set).
+    ///
+    /// A real chip keeps its flag clear until its first measurement ends;
+    /// here the flags stay clear until this is called with `true`. Only the
+    /// flag changes: the data registers still read the stored sample, so a
+    /// test sees a missing wait through the flag, not the values.
+    ///
+    /// A driver that waits on the flag returns
+    /// [`Error::Timeout`](crate::Error::Timeout) while it is held:
+    /// Distance's `init`, and `start_ranging` on the VL53L4CD. To test code
+    /// that waits after starting a Distance, hold the flag after
+    /// `start_ranging`, not before `init`.
+    pub fn set_ready(&mut self, addr: Address, ready: bool) -> bool {
+        match find_chip_mut(&mut self.bus, addr.get()) {
+            Some(c) if c.ready_flag.is_some() => {
+                c.held = !ready;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// [`SimBus::set_ready`] for the chip at `addr` on `port` of the hub at
+    /// `hub` only.
+    pub fn set_ready_at(&mut self, hub: Address, port: u8, addr: Address, ready: bool) -> bool {
+        let chip = port_mut(&mut self.bus, hub.get(), port)
+            .and_then(|bus| bus.chips.iter_mut().find(|c| c.addr == addr.get()));
+        match chip {
+            Some(c) if c.ready_flag.is_some() => {
+                c.held = !ready;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// The model underneath, for the crate's own tests.
     #[doc(hidden)]
     pub fn model(&self) -> &FakeBus {
@@ -983,6 +1075,20 @@ fn find_node_mut(bus: &mut FakeBus, addr: u8) -> Option<&mut FakeNode> {
     None
 }
 
+fn find_chip_mut(bus: &mut FakeBus, addr: u8) -> Option<&mut FakeChip> {
+    if let Some(i) = bus.chips.iter().position(|c| c.addr == addr) {
+        return bus.chips.get_mut(i);
+    }
+    for hub in bus.hubs.iter_mut() {
+        for port in hub.ports.iter_mut() {
+            if let Some(c) = find_chip_mut(port, addr) {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
 /// The first address `spec::CHIPS` lists for `kind`.
 fn chip_address(kind: ChipKind) -> u8 {
     CHIPS
@@ -1022,6 +1128,10 @@ fn chip(kind: ChipKind) -> FakeChip {
             .fixed(0x0F, 0x6C)
             .fixed(0x12, 0x00)
             .fixed(0x1E, 0x03)
+            .ready_flag(ReadyFlag::Bits {
+                register: 0x1E,
+                mask: 0x03,
+            })
             .reg(0x2C, 0x09)
             .reg(0x2D, 0x40),
         // LPS22HB: WHO_AM_I 0xB1; SWRESET reads back cleared with
@@ -1031,6 +1141,10 @@ fn chip(kind: ChipKind) -> FakeChip {
             .fixed(0x0F, 0xB1)
             .fixed(0x11, 0x10)
             .fixed(0x27, 0x03)
+            .ready_flag(ReadyFlag::Bits {
+                register: 0x27,
+                mask: 0x03,
+            })
             .reg(0x28, 0x00)
             .reg(0x29, 0x54)
             .reg(0x2A, 0x3F)
@@ -1042,6 +1156,10 @@ fn chip(kind: ChipKind) -> FakeChip {
         ChipKind::Ltr381rgb => FakeChip::new(addr, 1)
             .fixed(0x06, 0xC2)
             .fixed(0x07, 0x08)
+            .ready_flag(ReadyFlag::Bits {
+                register: 0x07,
+                mask: 0x08,
+            })
             .reg(0x0A, 0xF4)
             .reg(0x0B, 0x01)
             .reg(0x0D, 0xE8)
@@ -1067,6 +1185,10 @@ fn chip(kind: ChipKind) -> FakeChip {
                 .fixed(0x00E5, 0x03)
                 .reg(0x0030, 0x01)
                 .reg(0x0031, 0x01)
+                .ready_flag(ReadyFlag::Level {
+                    status: 0x0031,
+                    polarity: 0x0030,
+                })
                 .reg(0x0006, 0x0C)
                 .reg(0x0007, 0x8D)
                 // RESULT_OSC_CALIBRATE_VAL, which autonomous timing divides
