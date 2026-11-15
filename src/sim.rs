@@ -751,9 +751,10 @@ impl embedded_hal::delay::DelayNs for FakeDelay {
 use crate::spec::{sensirion_crc8, ChipKind, Kind, WriteLen, CHIPS};
 use crate::Address;
 
-/// The error a [`SimBus`] returns: nothing acknowledged the transfer. Its
-/// [`kind`](i2c::Error::kind) is [`ErrorKind::NoAcknowledge`], as a real
-/// bus reports for an absent device.
+/// The error a [`SimBus`] returns. Its [`kind`](i2c::Error::kind) is
+/// [`ErrorKind::NoAcknowledge`] when nothing acknowledged the transfer, as
+/// a real bus reports for an absent device, or the kind set with
+/// [`SimBus::set_read_fault`] for a read from a faulted board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SimError {
     address: u8,
@@ -1038,10 +1039,17 @@ impl SimBus {
     /// Make every read from the boards and chips at `addr` fail with an
     /// error of `kind` (`None` clears it), here and behind every hub port.
     /// Writes still land: the node keeps processing frames, as
-    /// [`SimBus::last_write`] shows. Returns whether anything is at `addr`.
+    /// [`SimBus::last_write`] shows. Returns whether any board or chip is
+    /// at `addr`; hubs are not faulted.
     ///
     /// For testing what code does when a status read fails, for example
-    /// whether it still sends a stop.
+    /// whether it still sends a stop. Choose a kind other than
+    /// `NoAcknowledge` for a hard failure: the drivers take a NACK for an
+    /// empty address, so a chip's `ready()`, for one, returns `Ok(false)`.
+    ///
+    /// The fault is set on the boards found at `addr` now and moves with a
+    /// node whose address changes. While a faulted board answers a read, the
+    /// read fails even if another device at that address would answer it.
     pub fn set_read_fault(&mut self, addr: Address, kind: Option<ErrorKind>) -> bool {
         set_read_fault(&mut self.bus, addr.get(), kind)
     }
