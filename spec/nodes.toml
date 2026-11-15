@@ -16,7 +16,7 @@
 
 [firmware]
 repo = "arduino/node_modulino_firmware"
-commit = "7d578e0"
+commit = "7d578e0066f741bdad17ce758f91cb62ef81a88a"
 file = "Core/Src/main.c"
 
 [[node]]

@@ -35,6 +35,7 @@ just fmt          # format
 just check        # fmt-check + clippy + docs (CI-equivalent)
 just test         # run tests
 just readme       # regenerate tests/readme_examples.rs after editing README code
+just drift        # check spec/nodes.toml against the pinned node firmware (clones it)
 ```
 
 ## Conventions

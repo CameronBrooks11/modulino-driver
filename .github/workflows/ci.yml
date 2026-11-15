@@ -104,11 +104,40 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  # spec/nodes.toml against the node firmware at the commit it pins. The
+  # second checkout reads the pin from the spec, so moving it is one edit.
+  firmware-drift:
+    name: Firmware drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Read the firmware pin
+        id: pin
+        run: echo "commit=$(sed -n 's/^commit = "\(.*\)"$/\1/p' spec/nodes.toml)" >> "$GITHUB_OUTPUT"
+      - name: Checkout node firmware at the pin
+        uses: actions/checkout@v5
+        with:
+          repository: arduino/node_modulino_firmware
+          ref: ${{ steps.pin.outputs.commit }}
+          path: node_modulino_firmware
+          persist-credentials: false
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+      - name: Compare
+        run: cargo test --test firmware_drift -- --ignored
+        env:
+          FIRMWARE_DIR: node_modulino_firmware
+
   # The only check branch protection requires. Add every job to `needs`.
   ok:
     name: ok
     if: always()
-    needs: [rust-checks, build-targets, msrv, security_audit]
+    needs: [rust-checks, build-targets, msrv, security_audit, firmware-drift]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
