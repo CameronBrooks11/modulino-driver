@@ -242,19 +242,24 @@ no time, no state.
 
 ```rust
 pub mod buzzer {
-    pub const WRITE_LEN: usize = 8;
-    pub fn encode(freq_hz: u32, duration_ms: u32) -> Result<[u8; WRITE_LEN], CodecError>;
+    pub const WRITE_LEN: usize = BUZZER.write_len.fixed(); // 8, from spec.rs
+    pub fn encode_tone(frequency_hz: u32, duration_ms: u32)
+        -> Result<[u8; WRITE_LEN], OutOfRange>;
+    pub fn encode_stop() -> [u8; WRITE_LEN];
 }
 pub mod knob {
-    pub const READ_PAYLOAD: usize = 3;
-    pub fn decode(p: &[u8; READ_PAYLOAD]) -> KnobRaw;   // { position: i16, pressed: bool }
+    pub const READ_PAYLOAD: usize = KNOB.read_payload; // 3, from spec.rs
+    pub fn decode(payload: &[u8; READ_PAYLOAD]) -> KnobRaw; // { count: i16, pressed: bool }
 }
 ```
 
-Range checks live here: Buzzer below 180 Hz overflows the firmware's 16-bit
-timer (`main.c:262-283`); Motors frequency is clamped to 200-60000 Hz
-(`motors.c:496-497`). `WRITE_LEN` and `READ_PAYLOAD` are re-exported from
-`spec.rs`, so a codec cannot disagree with the table.
+Range checks live here, and a value outside the range is `OutOfRange`, not
+clamped. Buzzer frequencies run from 180 Hz, below which the firmware's
+16-bit timer overflows, to 5 898 150 Hz, the highest that still gives a
+non-zero compare value (`main.c:262-283`). Motors DC frequencies run from
+200 to 60000 Hz, the range the firmware clamps to (`motors.c:496-497`).
+`WRITE_LEN` and `READ_PAYLOAD` are computed from the `spec.rs` tables, so a
+codec cannot disagree with them.
 
 This is the layer the language-neutral vectors bind to, and the one a port
 to another language reproduces.
@@ -269,8 +274,8 @@ A `.rs` path in this table is a modulino-rs v0.3.0 (`87e091a`) file:
 | LSM6DSOX | Movement | `movement.rs` | Try 0x6A then 0x6B; WHO_AM_I 0x6C |
 | VL53L4CD | Distance | ST's driver (stm32duino `VL53L4CD` at `b6ed0e2`) | Replaces `distance.rs`: bounded waits, timing computed from the oscillator |
 | VL53L4ED | Distance | ST's driver (stm32duino `VL53L4ED` at `a94cc0b`) | Same register map and configuration; model ID 0xEC (not 0xEB), 100 ms default budget, no first-sample wait |
-| HS3003 | Thermo | `hs3003` crate 0.1.1 | Replaced by a 60-line driver: the crate ignores the stale-sample status bits and waits a fixed 100 ms |
-| SHT31 | Thermo | new, about 80 lines | Fallback at 0x45 (`Modulino.h:614-627`) |
+| HS3003 | Thermo | `hs3003` crate 0.1.1 | Replaced by a small driver: the crate ignores the stale-sample status bits and waits a fixed 100 ms |
+| SHT31 | Thermo | new, a small driver | Fallback at 0x45 (`Modulino.h:614-627`) |
 | LTR381RGB | Light | `light.rs` | Trim to the lux/RGB path |
 | LPS22HB | Pressure | `pressure.rs` | WHO_AM_I 0xB1 |
 
