@@ -7,7 +7,7 @@ boards, for any host with an `embedded-hal` 1.0 I2C implementation.
 protocol the Modulino firmware speaks; [docs/design.md](docs/design.md) has
 the architecture and milestones. The API below is the restructured one
 described there; it may still change before 0.1.0. No module has been
-verified on hardware yet.
+verified on hardware yet; [docs/bench.md](docs/bench.md) is the plan.
 
 ## Origin
 
@@ -17,24 +17,30 @@ Apache-2.0 licence.
 
 ## Supported modules
 
-| Module | Hardware | Implementation | Default address |
-| :--- | :--- | :--- | :--- |
-| `Buttons` | STM32C011 node | **Internal** | 0x3E |
-| `Buzzer` | STM32C011 node | **Internal** | 0x1E |
-| `Pixels` | STM32C011 node, APA102-style LEDs | **Internal** | 0x36 |
-| `Distance` | VL53L4CD or VL53L4ED | **Internal** | 0x29 |
-| `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B |
-| `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B |
-| `Thermo` | HS3003, or SHT31 on some boards | **Internal** | 0x44 / 0x45 |
-| `Joystick` | STM32C011 node | **Internal** | 0x2C |
-| `LatchRelay` | STM32C011 node | **Internal** | 0x02 |
-| `Vibro` | STM32C011 node | **Internal** | 0x38 |
-| `LedMatrix` | STM32C011 node | **Internal** | 0x39 |
-| `Pressure` | LPS22HB | **Internal** | 0x5C |
-| `Light` | LTR-381RGB | **Internal** | 0x53 |
-| `OptoRelay` | STM32C011 node | **Internal** | 0x14 |
-| `Hub` | TCA9548A | **Internal** | 0x70 |
-| `Motors` | STM32C011 node | **Internal** | 0x24 |
+| Module | Hardware | Implementation | Default address | Bench |
+| :--- | :--- | :--- | :--- | :--- |
+| `Buttons` | STM32C011 node | **Internal** | 0x3E | Not run |
+| `Buzzer` | STM32C011 node | **Internal** | 0x1E | Not run |
+| `Pixels` | STM32C011 node, APA102-style LEDs | **Internal** | 0x36 | Not run |
+| `Distance` | VL53L4CD or VL53L4ED | **Internal** | 0x29 | Not run |
+| `Movement` | LSM6DSOX | **Internal** | 0x6A/0x6B | Not run |
+| `Knob` | STM32C011 node | **Internal** | 0x3A/0x3B | Not run |
+| `Thermo` | HS3003, or SHT31 on some boards | **Internal** | 0x44 / 0x45 | Not run |
+| `Joystick` | STM32C011 node | **Internal** | 0x2C | Not run |
+| `LatchRelay` | STM32C011 node | **Internal** | 0x02 | Not run |
+| `Vibro` | STM32C011 node | **Internal** | 0x38 | Not run |
+| `LedMatrix` | STM32C011 node | **Internal** | 0x39 | Not run |
+| `Pressure` | LPS22HB | **Internal** | 0x5C | Not run |
+| `Light` | LTR-381RGB | **Internal** | 0x53 | Not run |
+| `OptoRelay` | STM32C011 node | **Internal** | 0x14 | Not run |
+| `Hub` | TCA9548A | **Internal** | 0x70 | Not run |
+| `Motors` | STM32C011 node | **Internal** | 0x24 | Not run |
+
+Every module is covered by the automated rungs of design section 7 (spec
+conformance, codec vectors, the simulated bus or register sequences, as
+each applies). The Bench column records the last rung: the module run on
+real hardware from a Raspberry Pi by the checklist in
+[docs/bench.md](docs/bench.md).
 
 A node board runs Arduino's `node_modulino_firmware` on an STM32C011 and
 drives its LEDs, buttons or motors itself; the host talks only to the
