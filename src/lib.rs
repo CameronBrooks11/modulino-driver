@@ -71,7 +71,7 @@ mod node;
 pub mod scan;
 pub mod service;
 #[cfg(feature = "sim")]
-#[doc(hidden)]
+#[cfg_attr(docsrs, doc(cfg(feature = "sim")))]
 pub mod sim;
 pub mod spec;
 

@@ -1,18 +1,23 @@
-//! Simulated Modulino boards on a simulated I2C bus, for host tests.
+//! Simulated Modulino boards on a simulated I2C bus, for running the real
+//! drivers on a host with no hardware: a downstream crate's mock mode, or
+//! its CI. Start from [`SimBus`].
 //!
 //! Behind the `sim` feature, which brings in `std`; the default build stays
 //! `no_std` with no allocation. The models follow the node firmware source
-//! and the chips' datasheets; none has been checked against hardware, and
-//! this module is not yet a public API: it is hidden from the docs and may
-//! change in any release.
+//! (`node_modulino_firmware` at `7d578e0`) and the chips' datasheets. None
+//! has been checked against hardware, and this module is outside the
+//! crate's semver promise until the bench run confirms the models.
 //!
-//! `FakeNode` follows the node firmware (node_modulino_firmware@7d578e0):
+//! The lower-level `Fake*` types the crate's own tests build on are hidden
+//! from these docs and may change in any release.
+//!
+//! How a node board behaves here, from the firmware:
 //! - a read returns the strap byte and then the payload (main.c:471-529);
 //! - the firmware arms a receive of exactly the board's length
 //!   (main.c:531-561), and the STM32C0 HAL completes it when that many bytes
 //!   have arrived (stm32c0xx_hal_i2c.c, I2C_Slave_ISR_IT): a shorter write
 //!   is dropped with no error on the bus, and a longer one has its first
-//!   bytes processed. The fake then accepts the rest; the real board may
+//!   bytes processed. The model then accepts the rest; the real board may
 //!   instead stretch the clock or NACK, which is unverified;
 //! - a processed frame starting `CF` moves the board to a new address and
 //!   one starting `DIE` sends it to the ROM bootloader (main.c:235-254), which
@@ -27,9 +32,11 @@ use std::vec::Vec;
 
 use embedded_hal::i2c::{self, ErrorKind, ErrorType, I2c, NoAcknowledgeSource, Operation};
 
+#[doc(hidden)]
 /// The address the STM32C0 ROM bootloader answers at.
 pub const BOOTLOADER: u8 = 0x64;
 
+#[doc(hidden)]
 /// One simulated node board.
 #[derive(Debug, Clone)]
 pub struct FakeNode {
@@ -71,6 +78,25 @@ pub struct FakeNode {
     /// `Some(grayscale)` for an LED matrix, whose write length and read
     /// payload follow its mode (main.c:324-338, 506-516, 555-556).
     pub matrix_grayscale: Option<bool>,
+    /// Off the bus: the board answers nothing.
+    pub absent: bool,
+    /// How a processed frame shows in later reads.
+    pub echo: Echo,
+}
+
+#[doc(hidden)]
+/// How a node's processed frame shows in its read payload.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Echo {
+    /// It does not: the payload stays as set.
+    #[default]
+    None,
+    /// Opto relay: byte 0 is the relay pin, set from the frame's byte 0
+    /// (main.c:312-314, 496-500).
+    OptoRelay,
+    /// Latch relay: bytes 0 and 1 are the reset- and set-side pins, `[0, 1]`
+    /// after "on" and `[1, 0]` after "off" (main.c:315-323, 501-505).
+    LatchRelay,
 }
 
 impl FakeNode {
@@ -104,6 +130,8 @@ impl FakeNode {
             pending: None,
             cf_lengths: Vec::new(),
             matrix_grayscale: None,
+            absent: false,
+            echo: Echo::None,
         }
     }
 
@@ -162,6 +190,14 @@ impl FakeNode {
                 return;
             }
         }
+        match self.echo {
+            Echo::None => {}
+            Echo::OptoRelay => self.payload[0] = u8::from(data[0] != 0),
+            Echo::LatchRelay => {
+                let pins = if data[0] != 0 { [0, 1] } else { [1, 0] };
+                self.payload[..2].copy_from_slice(&pins);
+            }
+        }
         self.frames.push(data.to_vec());
     }
 }
@@ -176,6 +212,7 @@ impl i2c::Error for Nack {
     }
 }
 
+#[doc(hidden)]
 /// A bus with node boards and hubs on it.
 #[derive(Debug, Default)]
 pub struct FakeBus {
@@ -191,6 +228,7 @@ pub struct FakeBus {
     pub log: Option<Log>,
 }
 
+#[doc(hidden)]
 /// A TCA9548A: one control byte at its address, bit `n` connecting port
 /// `n` to the upstream bus. A write sets the byte (the last byte written
 /// wins); a read returns it. It does not answer general call.
@@ -204,6 +242,8 @@ pub struct FakeHub {
     pub ports: Vec<FakeBus>,
     /// Every control byte written, oldest first.
     pub writes: Vec<u8>,
+    /// Off the bus: neither the hub nor anything behind it answers.
+    pub absent: bool,
 }
 
 impl FakeHub {
@@ -214,6 +254,7 @@ impl FakeHub {
             control: 0,
             ports: (0..8).map(|_| FakeBus::default()).collect(),
             writes: Vec::new(),
+            absent: false,
         }
     }
 
@@ -230,6 +271,7 @@ impl FakeHub {
     }
 }
 
+#[doc(hidden)]
 /// A register-based sensor: a write of `index_len` bytes sets the register
 /// pointer (big-endian), further bytes write registers, and a read returns
 /// registers from the pointer on, auto-incrementing. Unset registers read
@@ -253,6 +295,8 @@ pub struct FakeChip {
     pub read_only: Vec<u16>,
     /// Every write frame received, in order.
     pub writes: Vec<Vec<u8>>,
+    /// Off the bus: the chip answers nothing.
+    pub absent: bool,
     pointer: u16,
     reply: Option<Vec<u8>>,
     not_ready: usize,
@@ -270,6 +314,7 @@ impl FakeChip {
             reply_after: 0,
             read_only: Vec::new(),
             writes: Vec::new(),
+            absent: false,
             pointer: 0,
             reply: None,
             not_ready: 0,
@@ -345,6 +390,7 @@ enum Target<'a> {
     Hub(&'a mut u8, &'a mut Vec<u8>),
 }
 
+#[doc(hidden)]
 /// One bus transaction or delay, in the order they happened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
@@ -354,6 +400,7 @@ pub enum Event {
     Delay(u64),
 }
 
+#[doc(hidden)]
 /// An event log shared by a `FakeBus` and a `FakeDelay`. `Arc<Mutex<..>>`
 /// so a bus that holds one is `Send`.
 pub type Log = Arc<Mutex<Vec<Event>>>;
@@ -440,16 +487,16 @@ impl FakeBus {
     /// reaches every board but no hub.
     fn targets<'a>(&'a mut self, addr: u8, out: &mut Vec<Target<'a>>) {
         for node in self.nodes.iter_mut() {
-            if addr == 0 || node.addr == addr {
+            if !node.absent && (addr == 0 || node.addr == addr) {
                 out.push(Target::Node(node));
             }
         }
         for chip in self.chips.iter_mut() {
-            if addr != 0 && chip.addr == addr {
+            if !chip.absent && addr != 0 && chip.addr == addr {
                 out.push(Target::Chip(chip));
             }
         }
-        for hub in self.hubs.iter_mut() {
+        for hub in self.hubs.iter_mut().filter(|h| !h.absent) {
             let (hub_addr, control) = (hub.addr, hub.control);
             // The hub answers its own address while its connected ports
             // carry the same transaction: the segments are joined.
@@ -558,6 +605,7 @@ impl I2c for FakeBus {
     }
 }
 
+#[doc(hidden)]
 /// A delay that only records how long it was asked to wait.
 #[derive(Debug, Default)]
 pub struct FakeDelay {
@@ -580,6 +628,316 @@ impl embedded_hal::delay::DelayNs for FakeDelay {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+use crate::spec::{sensirion_crc8, ChipKind, Kind, WriteLen, CHIPS};
+use crate::Address;
+
+/// The error a [`SimBus`] returns: nothing acknowledged the transfer. Its
+/// [`kind`](i2c::Error::kind) is [`ErrorKind::NoAcknowledge`], as a real
+/// bus reports for an absent device.
+pub type SimError = Nack;
+
+/// A simulated I2C bus holding simulated Modulino boards, for running the
+/// real drivers on a host with no hardware.
+///
+/// Add node boards by [`Kind`], chips by [`ChipKind`], and TCA9548A hubs
+/// with boards on their ports. Each starts at its default address with
+/// plausible, stable readings: no button pressed, the joystick centred, a
+/// room at about 25 °C and 50 %RH, 1013.25 hPa, about 175 lux, a target
+/// 200 mm away, and a board lying flat. Output boards keep what was last
+/// written: read it back with [`SimBus::last_write`], or through the driver
+/// where the firmware reports it (the opto and latch relays, the LED
+/// matrix's mode).
+///
+/// The models follow the node firmware source and the chips' datasheets.
+/// None has been checked against hardware, and this API is outside the
+/// crate's semver promise until the bench run confirms the models.
+///
+/// ```
+/// use modulino_driver::sim::SimBus;
+/// use modulino_driver::{Buttons, Kind, OptoRelay};
+///
+/// let bus = SimBus::new().with_node(Kind::OptoRelay);
+/// let mut relay = OptoRelay::new(bus);
+/// relay.on().unwrap();
+/// assert!(relay.is_on().unwrap());
+///
+/// // An absent board is a NACK, as on real hardware.
+/// let mut buttons = Buttons::new(relay.release());
+/// assert!(buttons.verify().is_err());
+/// ```
+#[derive(Debug, Default)]
+pub struct SimBus {
+    bus: FakeBus,
+}
+
+/// A simulated TCA9548A hub, to add to a [`SimBus`] with boards on its
+/// ports. Drive it with [`Hub`](crate::Hub) over a `RefCell<SimBus>`.
+#[derive(Debug)]
+pub struct SimHub {
+    hub: FakeHub,
+}
+
+impl SimHub {
+    /// A hub at `addr` (0x70-0x77) with nothing on its ports.
+    pub fn new(addr: Address) -> Self {
+        Self {
+            hub: FakeHub::new(addr.get()),
+        }
+    }
+
+    /// The same hub with the boards of `bus` on `port` (0-7).
+    ///
+    /// # Panics
+    ///
+    /// If `port` is above 7.
+    pub fn with_port(mut self, port: u8, bus: SimBus) -> Self {
+        let target = &mut self.hub.ports[usize::from(port)];
+        target.nodes.extend(bus.bus.nodes);
+        target.chips.extend(bus.bus.chips);
+        target.hubs.extend(bus.bus.hubs);
+        self
+    }
+}
+
+impl SimBus {
+    /// An empty bus: every address NACKs.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The same bus with a node board of `kind` at its default address.
+    pub fn with_node(self, kind: Kind) -> Self {
+        self.with_node_at(kind, kind.default_address())
+    }
+
+    /// The same bus with a node board of `kind` at `addr`, as if its address
+    /// had been changed. Its strap byte is still the kind's first.
+    pub fn with_node_at(mut self, kind: Kind, addr: Address) -> Self {
+        self.bus.nodes.push(node(kind).at(addr.get()));
+        self
+    }
+
+    /// The same bus with a `chip` at its default address.
+    pub fn with_chip(self, chip: ChipKind) -> Self {
+        let addr = Address::new(chip_address(chip)).expect("a chip address is 7-bit");
+        self.with_chip_at(chip, addr)
+    }
+
+    /// The same bus with a `chip` at `addr`.
+    pub fn with_chip_at(mut self, chip: ChipKind, addr: Address) -> Self {
+        let mut fake = self::chip(chip);
+        fake.addr = addr.get();
+        self.bus.chips.push(fake);
+        self
+    }
+
+    /// The same bus with `hub` on it.
+    pub fn with_hub(mut self, hub: SimHub) -> Self {
+        self.bus.hubs.push(hub.hub);
+        self
+    }
+
+    /// Take every board, chip and hub at `addr` off the bus, or put it
+    /// back, here and behind every hub port. A board off the bus answers
+    /// nothing, so a transfer to it fails with a NACK; it keeps its state
+    /// for when it comes back. Returns whether anything is at `addr`.
+    pub fn set_present(&mut self, addr: Address, present: bool) -> bool {
+        set_present(&mut self.bus, addr.get(), !present)
+    }
+
+    /// The last frame the node board at `addr` processed, searching every
+    /// hub port: what the driver last told it to do. `None` if no node is
+    /// there or it has processed nothing.
+    pub fn last_write(&self, addr: Address) -> Option<&[u8]> {
+        self.bus
+            .find_node(addr.get())
+            .and_then(|n| n.frames.last())
+            .map(Vec::as_slice)
+    }
+
+    /// Set what the node board at `addr` reports after its strap byte, as
+    /// the inputs would: buttons pressed, a knob position, a joystick
+    /// deflection. Searches every hub port. Returns whether a node is there.
+    ///
+    /// The bytes are the board's read payload as the firmware sends it
+    /// (`codec::<kind>::decode` reads them); missing bytes read 0xFF.
+    pub fn set_reading(&mut self, addr: Address, payload: &[u8]) -> bool {
+        match find_node_mut(&mut self.bus, addr.get()) {
+            Some(n) => {
+                n.payload = payload.to_vec();
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+impl ErrorType for SimBus {
+    type Error = SimError;
+}
+
+impl I2c for SimBus {
+    fn transaction(&mut self, address: u8, ops: &mut [Operation<'_>]) -> Result<(), SimError> {
+        self.bus.transaction(address, ops)
+    }
+}
+
+fn set_present(bus: &mut FakeBus, addr: u8, absent: bool) -> bool {
+    let mut found = false;
+    for n in bus.nodes.iter_mut().filter(|n| n.addr == addr) {
+        n.absent = absent;
+        found = true;
+    }
+    for c in bus.chips.iter_mut().filter(|c| c.addr == addr) {
+        c.absent = absent;
+        found = true;
+    }
+    for h in bus.hubs.iter_mut() {
+        if h.addr == addr {
+            h.absent = absent;
+            found = true;
+        }
+        for port in h.ports.iter_mut() {
+            found |= set_present(port, addr, absent);
+        }
+    }
+    found
+}
+
+fn find_node_mut(bus: &mut FakeBus, addr: u8) -> Option<&mut FakeNode> {
+    if let Some(i) = bus.nodes.iter().position(|n| n.addr == addr) {
+        return bus.nodes.get_mut(i);
+    }
+    for hub in bus.hubs.iter_mut() {
+        for port in hub.ports.iter_mut() {
+            if let Some(n) = find_node_mut(port, addr) {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
+/// The first address `spec::CHIPS` lists for `kind`.
+fn chip_address(kind: ChipKind) -> u8 {
+    CHIPS
+        .iter()
+        .find(|c| c.kind == kind)
+        .expect("every chip kind has a spec row")
+        .addresses[0]
+}
+
+/// A node board of `kind` at its default address, idle.
+fn node(kind: Kind) -> FakeNode {
+    let spec = kind.spec();
+    let mut node = match spec.write_len {
+        WriteLen::Fixed(len) => FakeNode::new(spec.straps[0], &vec![0; spec.read_payload], len),
+        // Mono at power-up (main.c:75).
+        WriteLen::Mode { .. } => FakeNode::led_matrix(false),
+    };
+    match kind {
+        // The ADC's midpoint: centred (codec::joystick, `128 - raw`).
+        Kind::Joystick => node.payload = vec![128, 128, 0],
+        Kind::OptoRelay => node.echo = Echo::OptoRelay,
+        Kind::LatchRelay => node.echo = Echo::LatchRelay,
+        _ => {}
+    }
+    node
+}
+
+/// A `chip` at its default address that gets its driver through init and
+/// returns a plausible reading.
+fn chip(kind: ChipKind) -> FakeChip {
+    let addr = chip_address(kind);
+    match kind {
+        // LSM6DSOX: WHO_AM_I 0x6C; the reset bit reads back cleared; both
+        // data-ready bits set; accelerometer (0, 0, +1 g) at ±2 g, 0.061
+        // mg/LSB (16393 = 0x4009); gyroscope at rest.
+        ChipKind::Lsm6dsox => FakeChip::new(addr, 1)
+            .fixed(0x0F, 0x6C)
+            .fixed(0x12, 0x00)
+            .fixed(0x1E, 0x03)
+            .reg(0x2C, 0x09)
+            .reg(0x2D, 0x40),
+        // LPS22HB: WHO_AM_I 0xB1; SWRESET reads back cleared with
+        // IF_ADD_INC set; both data-ready bits set; 1013.25 hPa
+        // (x 4096 = 0x3F5400) and 25.00 C (x 100 = 0x09C4).
+        ChipKind::Lps22hb => FakeChip::new(addr, 1)
+            .fixed(0x0F, 0xB1)
+            .fixed(0x11, 0x10)
+            .fixed(0x27, 0x03)
+            .reg(0x28, 0x00)
+            .reg(0x29, 0x54)
+            .reg(0x2A, 0x3F)
+            .reg(0x2B, 0xC4)
+            .reg(0x2C, 0x09),
+        // LTR-381RGB: PART_ID 0xC2; new data always flagged; IR 500 and
+        // green 1000, which at the driver's 18x gain and 16 bits is about
+        // 175 lux; red and blue 1000.
+        ChipKind::Ltr381rgb => FakeChip::new(addr, 1)
+            .fixed(0x06, 0xC2)
+            .fixed(0x07, 0x08)
+            .reg(0x0A, 0xF4)
+            .reg(0x0B, 0x01)
+            .reg(0x0D, 0xE8)
+            .reg(0x0E, 0x03)
+            .reg(0x10, 0xE8)
+            .reg(0x11, 0x03)
+            .reg(0x13, 0xE8)
+            .reg(0x14, 0x03),
+        // VL53L4CD/ED: model ID, booted, the GPIO showing data ready, an
+        // OSC_FREQUENCY of 3213, and a result of 200 mm with a valid range
+        // status (raw 9) and 12 SPADs. The 0x2D-0x87 configuration the
+        // driver loads is beyond the result registers.
+        ChipKind::Vl53l4cd | ChipKind::Vl53l4ed => {
+            let model = if kind == ChipKind::Vl53l4cd {
+                0xEB
+            } else {
+                0xEC
+            };
+            FakeChip::new(addr, 2)
+                .fixed(0x010F, model)
+                .fixed(0x0110, 0xAA)
+                .fixed(0x00E5, 0x03)
+                .reg(0x0030, 0x01)
+                .reg(0x0031, 0x01)
+                .reg(0x0006, 0x0C)
+                .reg(0x0007, 0x8D)
+                .fixed(0x0089, 0x09)
+                .fixed(0x008C, 0x0C)
+                .fixed(0x008E, 0x01)
+                .fixed(0x0091, 0x10)
+                .fixed(0x0093, 0x28)
+                .fixed(0x0096, 0x00)
+                .fixed(0x0097, 0xC8)
+        }
+        // HS3003: a fetch after the measurement request returns status 00,
+        // humidity 0x2000 (50 %) and temperature 6454 << 2 (25.0 C).
+        ChipKind::Hs3003 => FakeChip::new(addr, 1)
+            .reg(0x00, 0x20)
+            .reg(0x01, 0x00)
+            .reg(0x02, 0x64)
+            .reg(0x03, 0xD8),
+        // SHT31: NACKs reads until commanded; answers the status command
+        // and the single-shot measurement (0x6666 = 25.0 C, 0x8000 = 50 %).
+        ChipKind::Sht31 => {
+            let crc = |w: [u8; 2]| [w[0], w[1], sensirion_crc8(&w)];
+            let mut result = Vec::new();
+            result.extend(crc([0x66, 0x66]));
+            result.extend(crc([0x80, 0x00]));
+            let mut c = FakeChip::new(addr, 1)
+                .command(&[0xF3, 0x2D], &crc([0x80, 0x10]))
+                .command(&[0x24, 0x00], &result);
+            c.nack_idle_reads = true;
+            c
+        }
+    }
+}
+
 /// A bus that holds simulated boards must be `Send + 'static`, so an owner
 /// can move it to another thread; this fails to compile otherwise.
 #[allow(dead_code)]
@@ -587,4 +945,5 @@ fn assert_send() {
     fn is_send<T: Send + 'static>() {}
     is_send::<FakeBus>();
     is_send::<FakeDelay>();
+    is_send::<SimBus>();
 }

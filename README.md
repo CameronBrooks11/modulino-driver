@@ -370,6 +370,7 @@ See the `scan` module docs for the remaining limits.
 ## Features
 
 - `defmt`: derive `defmt::Format` on every public data type (errors, readings, states, spec types) for embedded logging
+- `sim`: simulated boards on a simulated I2C bus (`sim::SimBus`), to run the drivers on a host with no hardware. Brings in `std`. The models follow the firmware source and datasheets, have not been checked against hardware, and are outside the semver promise until they are
 
 ```toml
 [dependencies]
