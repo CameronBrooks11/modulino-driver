@@ -381,11 +381,11 @@ Some modules can have their address changed. You can specify a custom address wh
 ```rust
 use modulino_driver::{Address, Buttons};
 
-// Use default address
-let buttons = Buttons::new(i2c);
+// Default address
+let a = Buttons::new(i2c_a);
 
-// Use custom address (7-bit, 0x01..=0x77)
-let buttons = Buttons::with_address(i2c, Address::new(0x40).unwrap());
+// A custom address (7-bit, 0x01..=0x77), here on a second bus
+let b = Buttons::with_address(i2c_b, Address::new(0x40).unwrap());
 ```
 
 ## Minimum Supported Rust Version (MSRV)
