@@ -42,9 +42,9 @@ fn bus_and_delay(nodes: Vec<FakeNode>) -> (FakeBus, FakeDelay) {
 }
 
 /// A board of `spec`'s kind at its first strap default, plus the boards of
-/// a mode kind (the LED matrix) in each mode. The `_` arm is denied as
-/// unreachable, so the test fails to build if `WriteLen` loses
-/// `#[non_exhaustive]`.
+/// a mode kind (the LED matrix) in each mode. The catch-all `other` arm
+/// is denied as unreachable, so the test fails to build if `WriteLen`
+/// loses `#[non_exhaustive]`.
 #[deny(unreachable_patterns)]
 fn boards() -> Vec<(Kind, FakeNode)> {
     let mut out = Vec::new();
