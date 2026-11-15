@@ -141,6 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Hub::select`/`clear`/`release`, `HubPort::new(&mut Hub, port)` and
   `addresses::HUB` are gone; `Hub::deselect` disconnects every port
   after a failed deselect. Single execution context only for now.
+- The `defmt` feature requires defmt 1 (was 0.3). defmt 0.3.100
+  re-exports defmt 1, so a project on 0.3.100 or later, or on 1.x,
+  uses the same `Format` trait; one locked below 0.3.100 does not.
 
 ### Added
 
