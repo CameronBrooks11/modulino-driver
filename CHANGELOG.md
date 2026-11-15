@@ -133,8 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only code that sends the firmware's `CF` command. An address change pads
   `CF` to the board's current write length (48 bytes for a grayscale LED
   matrix), refuses a target address that already answers
-  (`Error::AddressInUse`, including an idle SHT3x found by its status
-  command), waits 500 ms for the reboot and confirms the board at its new
+  (`Error::AddressInUse`, including an idle SHT31 at 0x45, found by its
+  status command), waits 500 ms for the reboot and confirms the board at its new
   address before moving the `Node`. `general_call_reset` sends `CF 0x00` to
   address 0 once per node write length, shortest first, so every kind takes
   a frame of its own length before any longer one; it sends every length and

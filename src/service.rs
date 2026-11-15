@@ -74,9 +74,11 @@ const fn max_write_len() -> usize {
 /// confirmed there.
 ///
 /// The board is identified first, and nothing is sent if `new` is already
-/// its address. If something answers at `new`, including an SHT3x that only
-/// answers its status command, the result is [`Error::AddressInUse`] and
-/// nothing is sent. The `CF` frame is padded to the board's current write
+/// its address. If something answers at `new`, the result is
+/// [`Error::AddressInUse`] and nothing is sent. The check is a 1-byte read;
+/// at 0x45, where a Modulino Thermo's SHT31 sits and NACKs reads while
+/// idle, a NACKed read is followed by the SHT3x status command, so a device
+/// there that NACKs reads receives that write. The `CF` frame is padded to the board's current write
 /// length (48 bytes for a grayscale LED matrix), then the board gets
 /// [`RESET_MS`] to reboot.
 ///
@@ -131,9 +133,9 @@ pub fn reset_address<I2C: I2c>(
 /// reached. Nothing is checked first, so boards that share a default end up
 /// sharing an address.
 ///
-/// Every length is sent even if one fails. Returns whether any frame was
-/// acknowledged, or else the first bus error other than a NACK, after the
-/// wait. A NACK is not an error, since a frame no board takes may be
+/// Every length is sent even if one fails. After the wait, returns the
+/// first bus error other than a NACK if there was one, even if other frames
+/// were acknowledged; otherwise whether any frame was acknowledged. A NACK is not an error, since a frame no board takes may be
 /// refused.
 ///
 /// [`HubPort`]: crate::HubPort
@@ -204,8 +206,9 @@ fn move_to<I2C: I2c>(
     Ok(())
 }
 
-/// Whether anything answers at `addr`: a 1-byte read, or, at an address an
-/// SHT3x can have, its status command, since it NACKs reads while idle.
+/// Whether anything answers at `addr`: a 1-byte read, or, at an address
+/// where scan expects an SHT3x (0x45, the Modulino Thermo's), its status
+/// command, since it NACKs reads while idle.
 fn occupied<I2C: I2c>(bus: &mut I2C, addr: Address) -> Result<bool, Error<I2C::Error>> {
     let mut probe = [0u8; 1];
     if acked(bus.read(addr.get(), &mut probe))? {

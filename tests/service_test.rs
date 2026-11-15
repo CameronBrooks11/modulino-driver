@@ -239,7 +239,7 @@ fn general_call_reports_an_ack_from_a_short_frame_alone() {
         seen: 0,
     };
     assert_eq!(service::general_call_reset(&mut bus, &mut delay), Ok(true));
-    assert!(bus.seen > 1, "every length was sent");
+    assert_eq!(bus.seen, 6, "every length was sent");
 }
 
 /// Acknowledges the first write and NACKs the rest.
@@ -362,6 +362,27 @@ fn a_bus_error_on_the_in_use_probe_sends_nothing() {
     let mut delay = FakeDelay::default();
     assert_eq!(
         service::set_address(&mut node, new(0x40), &mut delay),
+        Err(Error::I2c(ErrorKind::Bus))
+    );
+    assert_eq!(delay.total_ns, 0);
+    bus.done();
+}
+
+#[test]
+fn a_bus_error_on_the_sht3x_status_probe_sends_nothing() {
+    // The read at 0x45 is NACKed, then the status command fails with a bus
+    // error: it is returned, and the command does not go out.
+    let mut bus = Mock::new(&[
+        Transaction::read(0x3E, vec![0x7C]),
+        Transaction::read(0x45, vec![0]).with_error(ErrorKind::NoAcknowledge(
+            embedded_hal::i2c::NoAcknowledgeSource::Address,
+        )),
+        Transaction::write(0x45, vec![0xF3, 0x2D]).with_error(ErrorKind::Bus),
+    ]);
+    let mut node = Node::new(bus.clone(), a(0x3E), Kind::Buttons);
+    let mut delay = FakeDelay::default();
+    assert_eq!(
+        service::set_address(&mut node, new(0x45), &mut delay),
         Err(Error::I2c(ErrorKind::Bus))
     );
     assert_eq!(delay.total_ns, 0);

@@ -392,7 +392,8 @@ bus.
 - `set_address(node, new: NewAddress, delay)`: identifies the board, does
   nothing if `new` is already its address, and refuses with
   `AddressInUse` if anything answers at `new` (a 1-byte read, plus the
-  status command at an SHT3x address, since an idle SHT3x NACKs reads).
+  SHT3x status command at 0x45, where the Thermo's SHT31 sits and NACKs
+  reads while idle; 0x44, the HS3003's, gets the read alone).
   The check covers the target, not the source: two boards of one kind at
   the same address both take the command, so connect one board per address
   while changing addresses. Then sends `CF new<<1` padded to the board's current write

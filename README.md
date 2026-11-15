@@ -394,7 +394,7 @@ A node board stores a new address in flash and reboots. The `service`
 module is the only code that sends that command. It refuses an address
 something already answers at, and confirms the board at its new address
 before reporting success. Connect one board per address while you do this:
-two identical boards at the same address both take the command.:
+two identical boards at the same address both take the command:
 
 ```rust
 use modulino_driver::{service, Buttons, Kind, NewAddress, Node};
