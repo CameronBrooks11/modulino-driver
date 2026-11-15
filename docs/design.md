@@ -93,11 +93,14 @@ port n.
 
 ### Defects in existing libraries this design removes by construction
 
+Paths ending in `.rs` are modulino-rs v0.3.0 (`87e091a`), the crate this
+one started from.
+
 | Defect | Where | Layer that removes it |
 |---|---|---|
 | Vibro `off()` sends 8 bytes, firmware needs 12, frame is dropped | `Modulino.h:369-373`, `vibro.rs:170-172` | Exact-length frames (4.3) |
 | A data write starting `CF`/`DIE` reprograms or bootloads the board (Knob set 17987, Buzzer 17987 Hz, matrix frames) | `main.c:235-254` | Prefix guard (4.3) |
-| AddressChanger pads CF to 40 bytes; a grayscale matrix needs 48 | `AddressChanger.ino:119` | Service pads to current length (4.8) |
+| AddressChanger pads CF to 40 bytes; a grayscale matrix needs 48 | `AddressChanger.ino:119, 148` | Service pads to current length (4.8) |
 | Hub select forgotten or not cleared on error | `Modulino.h:134-153`, `examples/multiplexer.rs:66-79` | Hub port is a bus (4.2) |
 | Discovery trusts an ACK, or a colliding address table | `Modulino.h:180-194`, `device_manager.py:85-86` | Identity by evidence (4.7) |
 | Write errors swallowed, failed reads update cached state | `Modulino.h:164-172, 223-231` | One `Result` contract (4.6, 4.9) |
@@ -165,7 +168,7 @@ tests/
   0x02 because the latch relay ships there. 0x00 (general call) and
   0x78-0x7F are not addresses.
 - `NewAddress(u8)`: the target of an address change, `0x08..=0x77`, the
-  range Arduino's tools accept (`AddressChanger.ino:147-151`). It converts to
+  range Arduino's tools accept (`AddressChanger.ino:134-135`). It converts to
   `Address`, not the other way round.
 - `Strap(u8)`: the 8-bit identity byte. `Strap::kind()` maps it to `Kind`;
   `Kind::default_addresses()` yields `Address` values. The `>> 1` happens in
@@ -250,7 +253,7 @@ pub mod knob {
 
 Range checks live here: Buzzer below 180 Hz overflows the firmware's 16-bit
 timer (`main.c:262-283`); Motors frequency is clamped to 200-60000 Hz
-(`motors.c:613-657`). `WRITE_LEN` and `READ_PAYLOAD` are re-exported from
+(`motors.c:496-497`). `WRITE_LEN` and `READ_PAYLOAD` are re-exported from
 `spec.rs`, so a codec cannot disagree with the table.
 
 This is the layer the language-neutral vectors bind to, and the one a port
@@ -258,7 +261,8 @@ to another language reproduces.
 
 ### 4.5 Chip drivers (`chips/`)
 
-Minimal register drivers for what each module exposes, written in the crate:
+Minimal register drivers for what each module exposes, written in the crate.
+A `.rs` path in this table is a modulino-rs v0.3.0 (`87e091a`) file:
 
 | Chip | Module | Starting point | Notes |
 |---|---|---|---|
@@ -374,8 +378,8 @@ The only code that sends `CF`, `DIE` or general call.
 
 - `set_address(node, new: NewAddress, delay)`: pads `CF` to the board's
   current write length (48 for a grayscale matrix), waits for the reset
-  (500 ms default, as AddressChanger does), then confirms the strap at the
-  new address. Returns the new `Node`.
+  (500 ms default, as AddressChanger does, `AddressChanger.ino:151`), then
+  confirms the strap at the new address. Returns the new `Node`.
 - `reset_address(node, delay)`: `CF 0x00`, which the firmware treats as
   "back to the strap default" (`main.c:165-167`).
 - `general_call_reset(bus, delay)`: `CF 0x00` to address 0x00, which resets
