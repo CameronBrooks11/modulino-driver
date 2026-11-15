@@ -152,6 +152,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   relays' and the LED matrix's reads); `set_reading` sets inputs;
   `set_ready` holds a chip's data-ready flags clear (Light, Pressure,
   Movement, Distance), to test code that waits for a first sample;
+  `set_read_fault` makes reads from an address fail with a chosen
+  `ErrorKind` while writes still land;
   `set_present` takes a board off the bus, where it NACKs with a
   `SimError`. The `_at` variants name a hub and port, for identical boards
   behind different ports. `SimBus` is `Send`, and keeps only each board's
