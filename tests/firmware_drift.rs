@@ -9,9 +9,10 @@
 //! accepts only the line shapes main.c has at the pin (after removing `//`
 //! comments), only `NODE_*` case labels that belong to a kind, and only
 //! Joystick falling through to the `return` after the switch. It panics on
-//! anything else, as on a `NODE_` define line it cannot read. If a firmware change breaks it,
-//! replace it with a reviewed manual check rather than widening it
-//! (docs/design.md section 6).
+//! anything else, as on a `NODE_` define line it cannot read, and on a name
+//! defined twice, since it does not evaluate `#if` blocks to see which one
+//! the firmware compiles. If a firmware change breaks it, replace it with a
+//! reviewed manual check rather than widening it (docs/design.md section 6).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -65,7 +66,12 @@ fn defines(source: &str) -> BTreeMap<String, String> {
             });
         match parsed {
             Some((name, value)) => {
-                out.insert(name.to_string(), value.to_string());
+                // A second definition may sit in an #if block or a comment;
+                // the scan cannot tell which one the firmware compiles.
+                assert!(
+                    out.insert(name.to_string(), value.to_string()).is_none(),
+                    "{name} defined twice"
+                );
             }
             None if line.contains("define") && line.contains("NODE_") => {
                 panic!("unreadable NODE_ define: {line:?}")
