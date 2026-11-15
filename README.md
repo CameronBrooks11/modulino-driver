@@ -422,8 +422,8 @@ let mut buttons = Buttons::with_address(node.release(), addr);
 
 ## Minimum Supported Rust Version (MSRV)
 
-The library requires Rust 1.75 or later. The test suite's dev-dependencies
-need a newer toolchain.
+The library requires Rust 1.75 or later. The tests and examples need
+Rust 1.85 or later, for their dev-dependencies.
 
 ## License
 

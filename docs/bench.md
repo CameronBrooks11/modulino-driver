@@ -14,7 +14,10 @@ the observed result, not the expected one; a step that does not match its
 1. Enable I2C (`sudo raspi-config`, Interface Options, I2C), reboot, and
    check `/dev/i2c-1` exists. Install `i2c-tools` for `i2cdetect` and
    `i2ctransfer`.
-2. On the Pi, in a clone of this repository:
+2. Install Rust 1.85 or later with rustup (<https://rustup.rs>). The
+   example builds the crate's dev-dependencies, which need 1.85; the
+   library alone needs 1.75. Raspberry Pi OS Bookworm's apt `rustc` is
+   1.63, too old. Then, on the Pi, in a clone of this repository:
    `cargo build --example bench` (no cross-compiling needed).
 3. Run each command as
    `cargo run --example bench -- <command> [address]`. The bus is

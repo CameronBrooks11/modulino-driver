@@ -93,6 +93,21 @@ jobs:
       - name: Check library with defmt
         run: cargo +1.75 check --lib --features defmt
 
+  # The oldest toolchain the tests and examples build on, as README.md and
+  # docs/bench.md state: the bench runs on a Pi that may not have the latest.
+  dev-toolchain:
+    name: Tests and examples (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.85"
+      - name: Build tests and examples
+        run: cargo +1.85 build --all-targets
+
   security_audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -137,7 +152,7 @@ jobs:
   ok:
     name: ok
     if: always()
-    needs: [rust-checks, build-targets, msrv, security_audit, firmware-drift]
+    needs: [rust-checks, build-targets, msrv, dev-toolchain, security_audit, firmware-drift]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
