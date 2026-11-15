@@ -46,10 +46,11 @@ mod bench {
 
     /// The host bus, with one change: an `EREMOTEIO` is reported as a NACK.
     ///
-    /// The Pi's I2C driver (i2c-bcm2835) returns `EREMOTEIO` when a transfer
-    /// is not acknowledged; linux-embedded-hal maps only `ENXIO` and `ENODEV`
-    /// to `NoAcknowledge` and reports `EREMOTEIO` as `Other`. The `nack`
-    /// command shows what the host returns without this change.
+    /// The Pi's I2C drivers (i2c-bcm2835 on Pi 1-4, i2c-designware on a Pi 5)
+    /// return `EREMOTEIO` when a transfer is not acknowledged;
+    /// linux-embedded-hal maps only `ENXIO` and `ENODEV` to `NoAcknowledge`
+    /// and reports `EREMOTEIO` as `Other`. docs/bench.md has the sources.
+    /// The `nack` command shows what the host returns without this change.
     pub struct Bus(I2cdev);
 
     #[derive(Debug)]
@@ -122,6 +123,11 @@ mod bench {
     ) -> Step {
         let result = body(dev);
         let stopped = cleanup(dev);
+        if let (Err(_), Err(e)) = (&result, &stopped) {
+            // Only the body's error is returned; this one must not vanish.
+            eprintln!("the stop step failed too: {e:?}");
+            eprintln!("the actuator may still be running: power the board off");
+        }
         result.and(stopped)
     }
 

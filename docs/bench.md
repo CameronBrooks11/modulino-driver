@@ -21,20 +21,25 @@ the observed result, not the expected one; a step that does not match its
    `/dev/i2c-1`; set `MODULINO_I2C` for another.
 4. Note at the top of the results: the Pi model, OS, kernel (`uname -r`),
    the I2C adapter's driver
-   (`readlink /sys/bus/i2c/devices/i2c-1/device/driver`), the bus speed if
+   (`readlink /sys/bus/i2c/devices/i2c-1/../driver`), the bus speed if
    changed from the default, and the commit of this repository.
 
 Connect one board at a time unless a step says otherwise; two boards of a
 kind share a default address.
 
-Each command stops its actuator (motors, relay, LEDs, buzzer, vibration)
-before it exits, even when a step fails. Ctrl-C does not: after a Ctrl-C,
-run the same command again to completion, or power the board off.
+Each command sends its actuator's stop (motors, opto relay, LEDs, buzzer,
+vibration) before it exits, even when a step fails. If that stop fails too,
+the command says so, and the board may still be running: power it off. The
+latch relay is the exception: it holds whatever state it was last set to.
+Ctrl-C sends no stop: after a Ctrl-C, run the same command again to
+completion, or power the board off.
 
 If reads come back corrupted or time out, try a slower bus
-(`dtparam=i2c_arm_baudrate=50000` in the boot config). The node boards
-stretch the clock, which the Pi's I2C controller handles poorly. That is a
-suspicion to test, not a known fault, so record it either way.
+(`dtparam=i2c_arm_baudrate=50000` in the boot config). The node firmware
+enables clock stretching (`main.c:656` at `7d578e0`), so the boards may
+stretch the clock, which the Pi 1-4's I2C controller is known to handle
+poorly. That is a suspicion to test, not a known fault, so record it either
+way.
 
 ## 1. The host
 
@@ -44,13 +49,14 @@ suspicion to test, not a known fault, so record it either way.
 | 1.2 | `i2cdetect -y 1` with all boards on the bus | The addresses present, to compare with 2.1 |
 
 What 1.1 shows depends on the adapter driver noted in setup step 4. From
-the Linux v6.12 sources:
+the kernel sources (Linux v6.12; the Pi 5 row from Raspberry Pi's
+`rpi-6.12.y`, where RP1's I2C is `snps,designware-i2c`, `rp1.dtsi:313-335`):
 
 | Driver | Used by | Unacknowledged address | linux-embedded-hal 0.5 reports |
 |---|---|---|---|
-| `i2c-bcm2835` | Pi 1-4, Zero | `EREMOTEIO` (121) | `Other` |
-| `i2c-designware` | Pi 5 (RP1) | `EREMOTEIO` (121) | `Other` |
-| `i2c-gpio` (bit-banged overlay) | any Pi, if configured | `ENXIO`; `EIO` for a data NACK | `NoAcknowledge`; `Bus` for a data NACK |
+| `i2c-bcm2835` | Pi 1-4, Zero | `EREMOTEIO` (121), `i2c-bcm2835.c:381-382` | `Other` |
+| `i2c-designware` | Pi 5 (RP1) | `EREMOTEIO` (121), `i2c-designware-common.c:707-711` | `Other` |
+| `i2c-gpio` (bit-banged overlay) | any Pi, if configured | `ENXIO` (`i2c-algo-bit.c:486, 493, 514`); `EIO` for a data NACK (`367, 505, 568, 579`) | `NoAcknowledge`; `Bus` for a data NACK |
 
 The `bench` bus maps `EREMOTEIO` to a NACK so the device steps do not depend
 on this. If 1.1 shows `host kind: Other`, then `scan`, the address-change
@@ -97,7 +103,7 @@ them with the bytes from the library's encoders; run them one at a time.
 | Step | Question | Commands (`frames` section) | Look for |
 |---|---|---|---|
 | 4.1 | Is a short write really dropped? | "Short write": Vibro on for 60 s, then the 8-byte off | The motor keeps running after the 8-byte off, and stops on the full 12-byte off. Both offs must come within the 60 s |
-| 4.2 | What does a node do with bytes beyond its write length? | "Over-length write": LED A as 4 bytes, then LED B as 5 bytes, each followed by a read | After the 4-byte write, whether LED A lights; after the 5-byte write, whether LED B lights and A goes out. Whether each read succeeds or the bus hangs (power-cycle ready). Then `i2cdetect -y 1` |
+| 4.2 | What does a node do with bytes beyond its write length? | "Over-length write": LED A as 4 bytes, then LED B as 5 bytes, each followed by a read | After the 4-byte write, whether LED A lights; after the 5-byte write, whether LED B lights and A goes out. Record each `i2ctransfer`'s exit status: the extra byte may be NACKed, a third outcome. Whether each read succeeds or the bus hangs (power-cycle ready). Then `i2cdetect -y 1` |
 | 4.3 | Is there a write-then-read race on the shared buffer? | "Write-then-read race": the matrix (in mono mode, as `led-matrix` leaves it) gets a border and a read in one transfer | The matrix shows the full border. In grayscale mode the 12-byte frame would be dropped as short, which looks like a race. The read is a sanity check: it returns the strap byte and `MON` whether or not there is a race. A clean result at the bus speed in setup step 4 says nothing about faster speeds |
 | 4.4 | Does the prefix hazard reproduce? | "Prefix hazard": Buzzer at 17987 Hz. **Ask first**: the board erases any stored address and reboots | The Buzzer does not sound; `scan` afterwards finds it at its strap default |
 
