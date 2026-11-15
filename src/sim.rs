@@ -220,6 +220,7 @@ impl FakeNode {
 }
 
 /// Bus error: nothing acknowledged the address.
+#[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Nack(pub u8);
 
@@ -710,7 +711,10 @@ impl i2c::Error for SimError {
 /// Two identical boards behind different hub ports share an address: the
 /// methods taking only an address act on the first one found (or, for
 /// [`SimBus::set_present`], on all of them). The `_at` methods name the hub
-/// and port.
+/// and port. A hub is found by its address: this bus's hubs first, then
+/// behind each port in turn, depth first. Two hubs with the same address
+/// behind different ports cannot be told apart; the first one found is
+/// used.
 ///
 /// The models follow the node firmware source and the chips' datasheets.
 /// None has been checked against hardware, and this API is outside the

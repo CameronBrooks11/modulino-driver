@@ -331,7 +331,7 @@ fn a_chip_at_another_address() {
 }
 
 #[test]
-fn the_sht31_nacks_reads_until_commanded() {
+fn the_sht31_nacks_idle_reads() {
     use embedded_hal::i2c::I2c;
     let mut bus = SimBus::new().with_chip(ChipKind::Sht31);
     let mut buf = [0u8; 3];
@@ -405,4 +405,82 @@ fn a_node_at_a_changed_address() {
 fn sim_bus_is_send() {
     fn is_send<T: Send + 'static>() {}
     is_send::<SimBus>();
+}
+
+#[test]
+fn nested_hubs_are_reached_by_their_own_address() {
+    let (outer, inner) = (a(0x70), a(0x71));
+    let buttons = Kind::Buttons.default_address();
+    let pressure = a(0x5C);
+    let inner_hub = SimHub::new(inner)
+        .unwrap()
+        .with_port(0, SimBus::new().with_node(Kind::Buttons))
+        .with_port(1, SimBus::new().with_chip(ChipKind::Lps22hb));
+    let hub = SimHub::new(outer)
+        .unwrap()
+        .with_port(2, SimBus::new().with_hub(inner_hub));
+    let mut sim = SimBus::new().with_hub(hub);
+
+    // The board behind the inner hub, by the inner hub's address.
+    assert!(sim.set_reading_at(inner, 0, buttons, &[1, 1, 0]));
+    assert!(
+        !sim.set_reading_at(outer, 2, buttons, &[0, 0, 0]),
+        "not directly on 0x70's port 2"
+    );
+
+    // Presence per port, for a chip and for the inner hub itself.
+    assert!(sim.set_present_at(inner, 1, pressure, false));
+    assert!(sim.model().hubs[0].ports[2].hubs[0].ports[1].chips[0].absent);
+    assert!(sim.set_present_at(inner, 1, pressure, true));
+    assert!(
+        !sim.set_present_at(outer, 3, inner, false),
+        "nothing at 0x71 on port 3"
+    );
+    assert!(sim.set_present_at(outer, 2, inner, false));
+    assert!(sim.model().hubs[0].ports[2].hubs[0].absent);
+
+    let bus = RefCell::new(sim);
+    let outer_hub = Hub::new(&bus);
+    let outer_port = RefCell::new(outer_hub.port(2).unwrap());
+    let inner_hub = Hub::with_address(&outer_port, inner).unwrap();
+    let mut b = Buttons::new(inner_hub.port(0).unwrap());
+    assert!(
+        is_nack(&b.read().unwrap_err()),
+        "the inner hub is off the bus"
+    );
+    drop(b);
+    drop(inner_hub);
+    drop(outer_port);
+    assert!(bus.borrow_mut().set_present_at(outer, 2, inner, true));
+    let outer_port = RefCell::new(outer_hub.port(2).unwrap());
+    let inner_hub = Hub::with_address(&outer_port, inner).unwrap();
+    let mut b = Buttons::new(inner_hub.port(0).unwrap());
+    let s = b.read().unwrap();
+    assert!(s.a && s.b && !s.c, "{s:?}");
+    b.set_leds(false, true, false).unwrap();
+    drop(b);
+    drop(inner_hub);
+    drop(outer_port);
+    assert_eq!(
+        bus.borrow().last_write_at(inner, 0, buttons),
+        Some(&[0, 1, 0][..])
+    );
+}
+
+#[test]
+fn an_address_change_keeps_no_history() {
+    use modulino_driver::{service, NewAddress, Node};
+    let mut node = Node::new(
+        SimBus::new().with_node(Kind::Buttons),
+        Kind::Buttons.default_address(),
+        Kind::Buttons,
+    );
+    service::set_address(
+        &mut node,
+        NewAddress::new(0x40).unwrap(),
+        &mut NoopDelay::new(),
+    )
+    .unwrap();
+    assert_eq!(node.address(), a(0x40));
+    assert!(node.release().model().nodes[0].cf_lengths.is_empty());
 }
