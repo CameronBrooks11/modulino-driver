@@ -1,87 +1,23 @@
-# Modulino Examples
+# Examples
 
-Since this is a `no_std` library, examples need to target specific hardware platforms.
+Host examples. Each runs with `cargo run --example <name>` against a
+stand-in I2C bus, so it shows how the API fits together without hardware.
 
-## Running Examples
+| Example | What it shows |
+|---|---|
+| `multiplexer` | Two Buttons modules at the same address on two ports of a Modulino Hub, each driven through a `HubPort`. A `HubPort` selects its port for one transaction and deselects after, so the drivers need no hub code. The stand-in bus accepts everything and prints nothing, so the run shows the code compiles and runs, not the bus traffic. |
 
-To run these examples, you'll need to:
-
-1. Choose a target microcontroller platform (e.g., STM32, ESP32, RP2040)
-2. Set up the appropriate HAL crate for your platform
-3. Configure the I2C peripheral
-
-## Example Hardware Setups
-
-### With Embassy (async) on RP2040
-
-```rust
-use embassy_rp::i2c::{I2c, Config};
-use modulino_driver::{Pixels, Color};
-
-#[embassy_executor::main]
-async fn main(_spawner: Spawner) {
-    let p = embassy_rp::init(Default::default());
-    
-    let i2c = I2c::new_blocking(p.I2C0, p.PIN_1, p.PIN_0, Config::default());
-    
-    let mut pixels = Pixels::new(i2c);
-    pixels.set_all(Color::RED, 50).unwrap();
-    pixels.show().unwrap();
-}
+```sh
+cargo run --example multiplexer
 ```
 
-### With ESP-HAL on ESP32
+## On hardware
 
-```rust
-use esp_hal::{i2c::I2C, prelude::*};
-use modulino_driver::{Buzzer, Note};
-
-#[entry]
-fn main() -> ! {
-    let peripherals = Peripherals::take();
-    let system = peripherals.SYSTEM.split();
-    let clocks = ClockControl::boot_defaults(system.clock_control).freeze();
-    
-    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
-    let i2c = I2C::new(
-        peripherals.I2C0,
-        io.pins.gpio21,
-        io.pins.gpio22,
-        100.kHz(),
-        &clocks,
-    );
-    
-    let mut buzzer = Buzzer::new(i2c);
-    buzzer.play_note(Note::C5, 500).unwrap();
-    
-    loop {}
-}
-```
-
-### With STM32 HAL
-
-```rust
-use stm32f4xx_hal::{i2c::I2c, prelude::*};
-use modulino_driver::Buttons;
-
-#[entry]
-fn main() -> ! {
-    let dp = pac::Peripherals::take().unwrap();
-    let rcc = dp.RCC.constrain();
-    let clocks = rcc.cfgr.freeze();
-    
-    let gpiob = dp.GPIOB.split();
-    let scl = gpiob.pb6.into_alternate_open_drain();
-    let sda = gpiob.pb7.into_alternate_open_drain();
-    
-    let i2c = I2c::new(dp.I2C1, (scl, sda), 100.kHz(), &clocks);
-    
-    let mut buttons = Buttons::new(i2c);
-    buttons.verify().unwrap();
-    
-    loop {
-        let state = buttons.read().unwrap();
-        buttons.set_leds(state.a, state.b, state.c).unwrap();
-    }
-}
-```
+Every driver takes any bus that implements `embedded_hal::i2c::I2c` (1.0),
+and the drivers that wait take an `embedded_hal::delay::DelayNs`. To run an
+example on a Linux host (a Raspberry Pi, or a USB-I2C bridge), replace its
+stand-in bus (`DummyI2c`) and error type with a real I2C bus, such as the one
+`linux-embedded-hal` provides; the bench plan in
+[docs/design.md](../docs/design.md) section 7 uses it. On a microcontroller
+the examples also need your HAL's entry point and a `no_std` setup. No
+module has been verified on hardware yet.
