@@ -23,7 +23,7 @@ file = "Core/Src/main.c"
 kind = "buttons"
 revision = 1
 image = "node"
-straps = [0x7C]
+straps = [0x7E]
 read_payload = 3
 write_len = { default = 3 }
 source = { strap = "main.c:32", read = "main.c:478-482", write = "main.c:544-545", handler = "main.c:257-261" }
