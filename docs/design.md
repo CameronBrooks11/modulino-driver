@@ -108,8 +108,11 @@ one started from.
 | Wait loops that exit silently | `distance.rs:75-86, 97-107` | Bounded waits return `Timeout` (4.5) |
 | 7-bit and 8-bit addresses mixed in one field | `modulino.py:189-195`, `lib.rs:96-174` | `Address` and `Strap` types (4.1) |
 
-These come from reading code; none has been observed on hardware yet.
-Section 7 says how each is confirmed at the bench.
+These come from reading code; none has been observed on hardware yet. Two
+are firmware behaviour, and section 7 lists a bench test for each: the
+dropped Vibro `off()` frame and the `CF`/`DIE` prefix hazard. The rest are
+in library code, which this crate replaces, so they need no hardware to
+check.
 
 ## 3. Architecture
 
