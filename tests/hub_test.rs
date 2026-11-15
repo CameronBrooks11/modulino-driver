@@ -104,7 +104,7 @@ fn missing_hub_fails_before_the_device_is_addressed() {
     let mut buttons = Buttons::new(hub.port(0).unwrap());
     assert_eq!(buttons.read(), Err(Error::I2c(Nack(HUB))));
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         [Event::Bus(HUB), Event::Bus(HUB)],
         "select, best-effort deselect; the board is never addressed"
     );

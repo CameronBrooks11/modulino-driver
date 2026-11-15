@@ -253,7 +253,7 @@ fn latch_relay_waits_out_the_coil_pulse() {
     relay.state().unwrap();
     let wait = Event::Delay(SETTLE_MS as u64 * 1_000_000);
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         [
             Event::Bus(0x02),
             wait,
@@ -279,7 +279,7 @@ fn latch_relay_waits_even_when_the_write_fails() {
     };
     assert!(relay.on(&mut delay).is_err());
     assert_eq!(
-        *log.borrow(),
+        *log.lock().unwrap(),
         [Event::Bus(0x02), Event::Delay(SETTLE_MS as u64 * 1_000_000)]
     );
 }
