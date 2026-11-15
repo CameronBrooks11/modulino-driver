@@ -109,7 +109,12 @@ one started from.
 | 7-bit and 8-bit addresses mixed in one field | `modulino.py:189-195`, `lib.rs:96-174` | `Address` and `Strap` types (4.1) |
 
 These come from reading code; none has been observed on hardware yet.
-Section 7 says how each is confirmed at the bench.
+Three rest on firmware behaviour that only the bench confirms. Vibro
+`off()` and AddressChanger's 40-byte `CF` depend on the exact-length rule,
+which section 7 tests through Vibro ("Is a short write really dropped?");
+the `CF`/`DIE` row depends on the prefix check ("Does the prefix hazard
+reproduce?"). The other six are defects in library code, visible by reading
+it, so they need no hardware to check.
 
 ## 3. Architecture
 
