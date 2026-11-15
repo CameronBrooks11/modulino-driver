@@ -26,11 +26,10 @@ impl Sensor {
     }
 
     fn address(self) -> Address {
-        let raw = match self {
+        match self {
             Sensor::Hs3003 => hs3003::ADDRESS,
             Sensor::Sht31 => sht31::ADDRESS,
-        };
-        Address::new(raw).expect("sensor addresses are valid")
+        }
     }
 }
 

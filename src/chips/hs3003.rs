@@ -16,7 +16,10 @@ use crate::addr::Address;
 use crate::Error;
 
 /// The HS3003's fixed address.
-pub const ADDRESS: u8 = 0x44;
+pub const ADDRESS: Address = match Address::new(0x44) {
+    Some(a) => a,
+    None => panic!("valid address"),
+};
 /// Wait after a request before the first fetch, in ms: the 14-bit
 /// conversion takes about 34 ms (datasheet, as I know it).
 pub const CONVERSION_MS: u32 = 40;

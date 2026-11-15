@@ -72,7 +72,7 @@ the README needs to say so.
 
 | Step | Command | Look for |
 |---|---|---|
-| 2.1 | `scan` with every board connected (one of each kind) | One line per board: `Node(addr, Kind)` with its strap byte, `Chip(addr, ChipKind)`, `Hub(addr)`. The Thermo's HS3003 shows as `Unknown(0x44)`. Record every strap byte. With section 3, where each driver sends its board's exact write length, this answers "Which firmware revision do shipped boards run?" for the lengths the spec pins. The strap byte alone tells the Knob's two straps apart and nothing more |
+| 2.1 | `scan` with every board connected (one of each kind) | One line per board: `Node(addr, Kind)` with its strap byte, `Chip(addr, ChipKind)`, `Hub(addr)`. The Thermo's HS3003 shows as `Unknown(Address(0x44))`. Record every strap byte. With section 3, where each driver sends its board's exact write length, this answers "Which firmware revision do shipped boards run?" for the lengths the spec pins. The strap byte alone tells the Knob's two straps apart and nothing more |
 | 2.2 | `hub` with only the hub on the Pi's bus and a board on two of its ports | Each port lists its own boards and no others. A board wired to the Pi directly answers on every port |
 
 ## 3. Modules

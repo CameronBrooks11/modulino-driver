@@ -18,7 +18,10 @@ use crate::spec::sensirion_crc8;
 use crate::Error;
 
 /// The SHT31's address on the Modulino Thermo.
-pub const ADDRESS: u8 = 0x45;
+pub const ADDRESS: Address = match Address::new(0x45) {
+    Some(a) => a,
+    None => panic!("valid address"),
+};
 /// Single shot, high repeatability, clock stretching off.
 const MEASURE: [u8; 2] = [0x24, 0x00];
 /// Maximum high-repeatability measurement time, in ms.

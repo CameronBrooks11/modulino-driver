@@ -178,7 +178,7 @@ pub const MOTORS: NodeSpec = NodeSpec {
 };
 
 /// Every node kind, in `spec/nodes.toml` order.
-pub const NODES: [NodeSpec; 10] = [
+pub const NODES: &[NodeSpec] = &[
     BUTTONS,
     BUZZER,
     VIBRO,
@@ -264,7 +264,7 @@ pub struct ChipSpec {
 }
 
 /// Every chip kind, in `spec/chips.toml` order.
-pub const CHIPS: [ChipSpec; 7] = [
+pub const CHIPS: &[ChipSpec] = &[
     ChipSpec {
         kind: ChipKind::Lsm6dsox,
         name: "lsm6dsox",
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn spec_lookup_matches_table() {
         for n in NODES {
-            assert_eq!(n.kind.spec(), &n);
+            assert_eq!(n.kind.spec(), n);
         }
     }
 }

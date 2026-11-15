@@ -5,6 +5,8 @@
 //! between them is [`Strap::default_address`]. Outside this crate a `Strap`
 //! comes only from a node read; it cannot be built from an arbitrary byte.
 
+use core::fmt;
+
 use crate::spec::{Kind, NODES};
 
 /// A 7-bit I2C address in `0x01..=0x77`.
@@ -12,8 +14,10 @@ use crate::spec::{Kind, NODES};
 /// The range includes 0x02 because the latch relay ships there. 0x00 is the
 /// general call address and 0x78-0x7F are reserved, so neither is a device
 /// address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+///
+/// `Debug` prints it in hex, `Address(0x3e)`, as datasheets and `i2cdetect`
+/// do; `{:x}` and `{:X}` format the bare value.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address(u8);
 
 impl Address {
@@ -34,9 +38,9 @@ impl Address {
 /// The target of a node address change, in `0x08..=0x77`.
 ///
 /// This is the range Arduino's address tools accept. It converts to
-/// [`Address`]; an `Address` does not convert back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+/// [`Address`]; an `Address` does not convert back. `Debug` prints it in
+/// hex, `NewAddress(0x40)`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NewAddress(u8);
 
 impl NewAddress {
@@ -51,6 +55,44 @@ impl NewAddress {
     /// The 7-bit address.
     pub const fn get(self) -> u8 {
         self.0
+    }
+}
+
+impl fmt::Debug for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Address({:#04x})", self.0)
+    }
+}
+
+impl fmt::LowerHex for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+impl fmt::UpperHex for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Debug for NewAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NewAddress({:#04x})", self.0)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Address {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "Address({=u8:#04x})", self.0)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for NewAddress {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "NewAddress({=u8:#04x})", self.0)
     }
 }
 

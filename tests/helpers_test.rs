@@ -228,3 +228,33 @@ fn error_display_shows_the_values() {
     let s = shown(Error::I2c(7));
     assert!(s.contains('7'), "{s}");
 }
+
+#[test]
+fn addresses_print_in_hex() {
+    let a = modulino_driver::Address::new(0x3E).unwrap();
+    assert_eq!(format!("{a:?}"), "Address(0x3e)");
+    assert_eq!(format!("{a:x} {a:X} {a:#04x}"), "3e 3E 0x3e");
+    let low = modulino_driver::Address::new(0x02).unwrap();
+    assert_eq!(format!("{low:?}"), "Address(0x02)");
+    let n = modulino_driver::NewAddress::new(0x40).unwrap();
+    assert_eq!(format!("{n:?}"), "NewAddress(0x40)");
+    let f = modulino_driver::Found::Unknown(modulino_driver::Address::new(0x44).unwrap());
+    assert_eq!(format!("{f:?}"), "Unknown(Address(0x44))");
+}
+
+#[test]
+fn chip_parameters_are_at_the_root() {
+    use modulino_driver::chips::{ltr381rgb, vl53l4};
+    let _: modulino_driver::DistanceVariant = vl53l4::Variant::Cd;
+    let _: modulino_driver::LightGain = ltr381rgb::Gain::X18;
+    let _: modulino_driver::LightResolution = ltr381rgb::Resolution::Bits16;
+    let _: modulino_driver::LightRate = ltr381rgb::Rate::Ms25;
+    assert_eq!(
+        modulino_driver::chips::hs3003::ADDRESS,
+        Address::new(0x44).unwrap()
+    );
+    assert_eq!(
+        modulino_driver::chips::sht31::ADDRESS,
+        Address::new(0x45).unwrap()
+    );
+}

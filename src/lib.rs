@@ -79,8 +79,10 @@ pub use addr::{Address, NewAddress, Strap};
 pub use chips::hs3003::ThermoReading;
 pub use chips::lps22hb::Lps22hb;
 pub use chips::lsm6dsox::{Axes, Lsm6dsox};
-pub use chips::ltr381rgb::{LightReading, Ltr381rgb};
-pub use chips::vl53l4::{DistanceReading, Vl53l4};
+pub use chips::ltr381rgb::{
+    Gain as LightGain, LightReading, Ltr381rgb, Rate as LightRate, Resolution as LightResolution,
+};
+pub use chips::vl53l4::{DistanceReading, Variant as DistanceVariant, Vl53l4};
 pub use codec::buttons::ButtonState;
 pub use codec::joystick::{JoystickRaw, JoystickState};
 pub use codec::knob::KnobRaw;
