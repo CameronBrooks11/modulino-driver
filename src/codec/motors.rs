@@ -70,6 +70,7 @@ impl DecayMode {
 /// release delay above 0 (motors.c:790-792).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub struct MotorStatus {
     /// Motor A current, ADC counts above the idle baseline
     pub current_a_raw: u16,

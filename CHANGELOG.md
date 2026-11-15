@@ -17,7 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `read()` returns the state or an error. `new_with_address(i2c, u8)`
   becomes `with_address(i2c, Address)`, and `address()` returns
   `Address`. `ButtonState` moves to `codec::buttons`.
-- `Error` is `#[non_exhaustive]`.
+- `Error` is `#[non_exhaustive]`, and so are `Found`, `Variant`,
+  `ChipId` and `WriteLen` (a match needs a `_` arm), and `NodeSpec`,
+  `ChipSpec`, `DistanceReading`, `LightReading` and `MotorStatus` (read
+  their fields; they cannot be built outside the crate). New scan
+  results, chip variants and readout fields can then arrive without a
+  breaking release.
 - `Buzzer`, `Vibro`, `Knob`, `Pixels`, `Joystick`, `OptoRelay` and
   `LatchRelay` are rebuilt on the node core with pure codecs, in the same
   shape as `Buttons`: `new`/`with_address(Address)` do no I/O,

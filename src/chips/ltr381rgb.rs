@@ -126,6 +126,7 @@ pub enum Rate {
 /// One reading of all four channels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub struct LightReading {
     /// Red channel, raw counts
     pub red: u32,
