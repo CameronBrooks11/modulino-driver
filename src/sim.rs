@@ -21,7 +21,7 @@
 //! What the board does with the bytes past its length is not modelled.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::vec;
 use std::vec::Vec;
 
@@ -358,6 +358,12 @@ pub enum Event {
 /// so a bus that holds one is `Send`.
 pub type Log = Arc<Mutex<Vec<Event>>>;
 
+/// The log, even if a thread panicked while holding it: a poisoned lock
+/// would otherwise make every later bus call panic too.
+fn lock(log: &Log) -> MutexGuard<'_, Vec<Event>> {
+    log.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 impl FakeBus {
     /// A bus with these boards.
     pub fn new(nodes: Vec<FakeNode>) -> Self {
@@ -409,7 +415,7 @@ impl FakeBus {
     /// port, that a delay logged since the `CF` has let through.
     pub fn settle(&mut self) {
         let Some(log) = self.log.clone() else { return };
-        let log = log.lock().unwrap();
+        let log = lock(&log);
         self.settle_with(&log);
     }
 
@@ -474,7 +480,7 @@ impl I2c for FakeBus {
         self.transactions += 1;
         self.settle();
         if let Some(log) = &self.log {
-            log.lock().unwrap().push(Event::Bus(address));
+            lock(log).push(Event::Bus(address));
         }
         let log = self.log.clone();
         let mut targets = Vec::new();
@@ -506,7 +512,7 @@ impl I2c for FakeBus {
                                 n.write(data);
                                 // With a log, the new address waits for a delay.
                                 if let (true, Some(log)) = (n.address_changes > changes, &log) {
-                                    n.pending = Some((n.addr, log.lock().unwrap().len()));
+                                    n.pending = Some((n.addr, lock(log).len()));
                                     n.addr = old;
                                 }
                             }
@@ -565,7 +571,7 @@ impl embedded_hal::delay::DelayNs for FakeDelay {
     fn delay_ns(&mut self, ns: u32) {
         self.total_ns += ns as u64;
         if let Some(log) = &self.log {
-            let mut log = log.lock().unwrap();
+            let mut log = lock(log);
             match log.last_mut() {
                 Some(Event::Delay(total)) => *total += ns as u64,
                 _ => log.push(Event::Delay(ns as u64)),

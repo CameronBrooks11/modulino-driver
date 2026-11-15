@@ -76,3 +76,24 @@ fn absent_address_nacks() {
     let mut bus = buzzer_bus();
     assert!(bus.read(0x20, &mut [0u8; 1]).is_err());
 }
+
+#[test]
+fn a_poisoned_log_does_not_break_the_bus() {
+    // A thread that panics while holding the log poisons its mutex; the bus
+    // must keep working rather than panic on every later transaction.
+    let log = support::Log::default();
+    let held = log.clone();
+    let _ = std::thread::spawn(move || {
+        let _guard = held.lock().unwrap();
+        panic!("poison the log");
+    })
+    .join();
+    assert!(log.is_poisoned());
+    let mut bus = FakeBus {
+        nodes: vec![FakeNode::new(0x7C, &[0; 3], 3)],
+        log: Some(log),
+        ..Default::default()
+    };
+    let mut buf = [0u8; 1];
+    assert!(bus.read(0x3E, &mut buf).is_ok());
+}
