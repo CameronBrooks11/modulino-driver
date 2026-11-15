@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their fields; they cannot be built outside the crate). New scan
   results, chip variants and readout fields can then arrive without a
   breaking release.
+- `spec::NODES` and `spec::CHIPS` are `&'static [NodeSpec]` and
+  `&'static [ChipSpec]`, not arrays, so a new board does not change
+  their type.
+- `chips::hs3003::ADDRESS` and `chips::sht31::ADDRESS` are `Address`,
+  not `u8`.
+- `Address` and `NewAddress` print in hex under `Debug`
+  (`Address(0x3e)`), and `Address` implements `LowerHex` and `UpperHex`.
+- The Distance and Light parameter types are re-exported at the root as
+  `DistanceVariant`, `LightGain`, `LightResolution` and `LightRate`.
 - `Buzzer`, `Vibro`, `Knob`, `Pixels`, `Joystick`, `OptoRelay` and
   `LatchRelay` are rebuilt on the node core with pure codecs, in the same
   shape as `Buttons`: `new`/`with_address(Address)` do no I/O,
