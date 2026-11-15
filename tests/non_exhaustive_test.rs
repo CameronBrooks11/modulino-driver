@@ -1,7 +1,10 @@
 //! The public enums that can grow are `#[non_exhaustive]`: each match below
 //! names every variant and still needs its `_` arm. Without the attribute
-//! the `_` arm is an unreachable pattern, which `just check` rejects.
-//! (`WriteLen` is covered by the match in `service_test.rs`.)
+//! the `_` arm is an unreachable pattern, denied here so that `cargo test`
+//! fails too, not only clippy. (`WriteLen` is covered by the match in
+//! `service_test.rs`.)
+
+#![deny(unreachable_patterns)]
 
 use modulino_driver::chips::vl53l4::Variant;
 use modulino_driver::scan::Found;
