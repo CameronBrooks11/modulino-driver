@@ -13,7 +13,7 @@ rust-version = "1.75"
 # The tests reach the crate's `sim` module through a path dev-dependency on
 # the crate itself, which `cargo package` strips, so they cannot build from
 # the package; they stay in the repository. The rest is repository tooling.
-exclude = ["tests/", ".github/", "AGENTS.md", "CLAUDE.md", "justfile", ".gitignore"]
+exclude = ["tests/", ".github/", "AGENTS.md", "justfile", ".gitignore"]
 
 [dependencies]
 embedded-hal = "1.0"
